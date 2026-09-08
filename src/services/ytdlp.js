@@ -130,10 +130,22 @@ function commonArgs() {
     '--socket-timeout',
     String(config.ytdlp.socketTimeout),
     '--extractor-args',
-    'youtube:player_client=android,web',
+    'youtube:player_client=ios,android,mweb',
   ];
 
-  if (config.ytdlp.cookiesFile) args.push('--cookies', config.ytdlp.cookiesFile);
+  let cookiesFile = config.ytdlp.cookiesFile;
+  if (!cookiesFile && process.env.YTDLP_COOKIES_TEXT) {
+    const os = require('node:os');
+    const tmp = path.join(os.tmpdir(), 'yt_cookies.txt');
+    try {
+      if (!fs.existsSync(tmp) || fs.readFileSync(tmp, 'utf8') !== process.env.YTDLP_COOKIES_TEXT) {
+        fs.writeFileSync(tmp, process.env.YTDLP_COOKIES_TEXT, 'utf8');
+      }
+      cookiesFile = tmp;
+    } catch {}
+  }
+
+  if (cookiesFile) args.push('--cookies', cookiesFile);
   else if (config.ytdlp.cookiesFromBrowser) args.push('--cookies-from-browser', config.ytdlp.cookiesFromBrowser);
 
   return args;
