@@ -40,6 +40,14 @@ async function main() {
     process.exit(1);
   }
 
+  logger.info(`Node.js: ${process.version}`);
+  try {
+    const voicePkg = require('@discordjs/voice/package.json');
+    logger.info(`@discordjs/voice: v${voicePkg.version}`);
+  } catch {
+    logger.info('@discordjs/voice: загружен');
+  }
+
   await initEncryption();
   await checkDependencies();
 

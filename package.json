@@ -4,7 +4,7 @@
   "description": "Discord music bot (prefix commands, YouTube/Spotify/SoundCloud via yt-dlp)",
   "main": "src/index.js",
   "engines": {
-    "node": ">=18.17.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "start": "node src/index.js",

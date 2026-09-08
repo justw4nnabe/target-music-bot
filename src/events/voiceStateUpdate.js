@@ -20,7 +20,7 @@ module.exports = {
         return;
       }
 
-      if (oldState.channelId !== newState.channelId) {
+      if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
         queue.voiceChannelId = newState.channelId;
         logger.info(`[${guild.id}] Бота перенесли в другой канал`);
       }

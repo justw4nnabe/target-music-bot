@@ -1,0 +1,9 @@
+﻿# Конфигурация для Nixpacks (Railway)
+[phases.setup]
+nixPkgs = ["nodejs_22", "ffmpeg", "yt-dlp", "python3"]
+
+[phases.install]
+cmds = ["npm install --omit=dev --no-audit --no-fund"]
+
+[start]
+cmd = "npm start"
