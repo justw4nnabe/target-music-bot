@@ -33,11 +33,11 @@ function parseDuration(input) {
 }
 
 function progressBar(current, total, length = 20) {
-  if (!Number.isFinite(total) || total <= 0) return '🔴 прямой эфир';
+  if (!Number.isFinite(total) || total <= 0) return 'прямой эфир';
 
   const ratio = Math.min(1, Math.max(0, current / total));
   const position = Math.min(length - 1, Math.floor(ratio * length));
-  return `${'▬'.repeat(position)}🔘${'▬'.repeat(length - position - 1)}`;
+  return `${'▬'.repeat(position)}●${'▬'.repeat(length - position - 1)}`;
 }
 
 function truncate(text, max = 60) {

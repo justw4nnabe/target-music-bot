@@ -305,6 +305,9 @@ class MusicQueue {
     let streamInfo = await resolver.getStream(track);
 
     this.idleAction = 'ignore';
+    try {
+      this.player.stop(true);
+    } catch {}
     this.releaseStream();
 
     let handle;
@@ -326,7 +329,10 @@ class MusicQueue {
         logger.warn(`[${this.guildId}] Ошибка воспроизведения YouTube для «${track.title}», пробую SoundCloud…`);
         try {
           const soundcloud = require('../services/sources/soundcloud');
-          const scQuery = `${track.title} ${track.author && track.author !== 'YouTube' ? track.author : ''}`.trim();
+          const author = track.author && track.author !== 'YouTube' && track.author !== 'SoundCloud' ? track.author : '';
+          const scQuery = author && !track.title.toLowerCase().includes(author.toLowerCase())
+            ? `${track.title} ${author}`.trim()
+            : track.title;
           const scResults = await soundcloud.search(scQuery, track.requestedBy, 1);
           if (scResults && scResults[0]) {
             logger.info(`[${this.guildId}] Найдена копия на SoundCloud, переключаю поток…`);
@@ -417,6 +423,11 @@ class MusicQueue {
     const stderr = this.streamHandle?.stderr;
     if (stderr) logger.debug(`[${this.guildId}] ffmpeg stderr: ${stderr.slice(-500)}`);
 
+    if (this.idleAction === 'ignore') {
+      logger.debug(`[${this.guildId}] Ошибка плеера проигнорирована (управляемая смена трека/перемотка)`);
+      return;
+    }
+
     if (this.current) {
       await this.send(
         embeds.warning(`Проблема с воспроизведением «${truncate(this.current.title, 70)}» — переключаюсь дальше.`),
@@ -426,7 +437,7 @@ class MusicQueue {
 
   async handleQueueEnd() {
     await this.retireNowPlaying();
-    await this.send(embeds.info('🏁 Очередь закончилась. Добавь ещё треков или я выйду из канала через несколько минут.'));
+    await this.send(embeds.info('Очередь закончилась. Добавь ещё треков или я выйду из канала через несколько минут.'));
     this.scheduleIdleLeave();
   }
 
@@ -454,7 +465,7 @@ class MusicQueue {
       const chosen = candidate || results[0] || null;
       if (chosen) {
         chosen.isAutoplay = true;
-        await this.send(embeds.info(`📻 **Автовоспроизведение:** следующий трек [**${truncate(chosen.title, 70)}**](${chosen.url})`));
+        await this.send(embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(chosen.title, 70)}**](${chosen.url})`));
       }
       return chosen;
     } catch (error) {
@@ -475,7 +486,7 @@ class MusicQueue {
     this.idleTimer = setTimeout(() => {
       this.idleTimer = null;
       if (this.destroyed || (this.playing && !this.paused)) return;
-      this.send(embeds.info('👋 Вышел из голосового канала из-за неактивности (5 минут без музыки).')).catch(() => {});
+      this.send(embeds.info('Вышел из голосового канала из-за неактивности (5 минут без музыки).')).catch(() => {});
       this.destroy('idle').catch(() => {});
     }, config.player.leaveOnEmptyQueueMs);
   }
@@ -494,7 +505,7 @@ class MusicQueue {
     this.emptyChannelTimer = setTimeout(() => {
       this.emptyChannelTimer = null;
       if (this.destroyed) return;
-      this.send(embeds.info('👋 В голосовом канале никого не осталось — выхожу.')).catch(() => {});
+      this.send(embeds.info('В голосовом канале никого не осталось — выхожу.')).catch(() => {});
       this.destroy('empty-channel').catch(() => {});
     }, config.player.leaveOnEmptyChannelMs);
 

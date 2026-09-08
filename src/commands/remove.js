@@ -20,6 +20,6 @@ module.exports = {
     }
 
     const track = queue.remove(position);
-    await reply(embeds.success(`🗑️ Убрал из очереди: **${truncate(track.title, 70)}**`));
+    await reply(embeds.success(`Убрал из очереди: **${truncate(track.title, 70)}**`));
   },
 };

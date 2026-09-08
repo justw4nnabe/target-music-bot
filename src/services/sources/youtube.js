@@ -125,7 +125,77 @@ async function getPlaylist(url, requestedBy) {
   };
 }
 
+const { parseDuration } = require('../../utils/format');
+
+async function searchFast(query, requestedBy, limit = 5) {
+  try {
+    const url = 'https://www.youtube.com/youtubei/v1/search?prettyPrint=false';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00',
+            hl: 'ru',
+            gl: 'US',
+          },
+        },
+        query,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const section =
+      json.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]
+        ?.itemSectionRenderer?.contents || [];
+
+    const tracks = [];
+    for (const item of section) {
+      const vr = item.videoRenderer;
+      if (!vr || !vr.videoId) continue;
+
+      const title = vr.title?.runs?.map((r) => r.text).join('') || vr.title?.simpleText || 'Без названия';
+      const author = vr.ownerText?.runs?.[0]?.text || 'YouTube';
+      const lengthText = vr.lengthText?.simpleText || '';
+      const duration = lengthText ? parseDuration(lengthText) || 0 : 0;
+      const thumb = vr.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`;
+
+      tracks.push(
+        createTrack({
+          source: 'youtube',
+          title,
+          author,
+          url: `https://www.youtube.com/watch?v=${vr.videoId}`,
+          duration,
+          thumbnail: thumb,
+          requestedBy,
+          streamProvider: fetchStream,
+        }),
+      );
+
+      if (tracks.length >= limit) break;
+    }
+
+    return tracks.length ? tracks : null;
+  } catch (error) {
+    logger.debug(`searchFast ошибка: ${error.message}, переключаюсь на yt-dlp search`);
+    return null;
+  }
+}
+
 async function search(query, requestedBy, limit = config.search.resultsLimit) {
+  const fastResults = await searchFast(query, requestedBy, limit);
+  if (fastResults && fastResults.length) return fastResults;
+
   const info = await ytdlp.runJson(['--flat-playlist', `ytsearch${limit}:${query}`]);
   const entries = (info.entries ?? []).filter(Boolean);
   return entries.map((entry) => normalize(entry, requestedBy)).filter(Boolean);

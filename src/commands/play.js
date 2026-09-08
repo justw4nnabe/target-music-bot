@@ -28,7 +28,7 @@ module.exports = {
       displayName: message.member?.displayName ?? message.author.username,
     };
 
-    const notice = await message.channel.send({ embeds: [embeds.info('🔎 Ищу…')] });
+    const notice = await message.channel.send({ embeds: [embeds.info('Ищу…')] });
 
     try {
       const result = await resolver.resolveQuery(query, requestedBy);

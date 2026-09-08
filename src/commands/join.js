@@ -14,6 +14,6 @@ module.exports = {
     await queue.connect(voiceChannel);
     if (queue.isEmpty) queue.scheduleIdleLeave();
 
-    await reply(embeds.success(`🎧 Подключился к **${voiceChannel.name}**.`));
+    await reply(embeds.success(`Подключился к **${voiceChannel.name}**.`));
   },
 };

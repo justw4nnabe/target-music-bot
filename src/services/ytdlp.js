@@ -130,7 +130,7 @@ function commonArgs() {
     '--socket-timeout',
     String(config.ytdlp.socketTimeout),
     '--extractor-args',
-    'youtube:player_client=ios,android,mweb',
+    'youtube:player_client=android,web',
   ];
 
   let cookiesFile = config.ytdlp.cookiesFile;

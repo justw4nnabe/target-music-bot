@@ -14,6 +14,6 @@ module.exports = {
   async execute({ queue, reply }) {
     const track = queue.pause();
     await queue.refreshNowPlaying();
-    await reply(embeds.success(`⏸️ Пауза: **${truncate(track.title, 70)}**`));
+    await reply(embeds.success(`Пауза: **${truncate(track.title, 70)}**`));
   },
 };

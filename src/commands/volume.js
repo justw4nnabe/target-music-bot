@@ -12,7 +12,7 @@ module.exports = {
 
   async execute({ queue, args, reply, prefix }) {
     if (!args.length) {
-      await reply(embeds.info(`🔊 Текущая громкость: **${queue.volume}%**\nИзменить: \`${prefix}volume 40\``));
+      await reply(embeds.info(`Текущая громкость: **${queue.volume}%**\nИзменить: \`${prefix}volume 40\``));
       return;
     }
 
@@ -22,7 +22,6 @@ module.exports = {
     }
 
     const volume = queue.setVolume(value);
-    const icon = volume === 0 ? '🔇' : volume < 40 ? '🔉' : '🔊';
-    await reply(embeds.success(`${icon} Громкость: **${volume}%**`));
+    await reply(embeds.success(`Громкость: **${volume}%**`));
   },
 };

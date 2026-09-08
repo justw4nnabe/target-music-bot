@@ -31,7 +31,7 @@ module.exports = {
     if (isRequester || isAdmin || listeners.size <= 1) {
       const skipped = queue.skip();
       const byWhom = isRequester ? 'автором трека' : (isAdmin ? 'администратором' : '');
-      await reply(embeds.success(`⏭️ Пропущено ${byWhom ? `(${byWhom})` : ''}: **${truncate(skipped.title, 70)}**`));
+      await reply(embeds.success(`Пропущено ${byWhom ? `(${byWhom})` : ''}: **${truncate(skipped.title, 70)}**`));
       return;
     }
 
@@ -39,7 +39,7 @@ module.exports = {
 
     if (queue.skipVotes.has(authorId)) {
       await reply(
-        embeds.info(`🗳️ Ты уже проголосовал за пропуск (**${queue.skipVotes.size}/${requiredVotes}** голосов).`),
+        embeds.info(`Ты уже проголосовал за пропуск (**${queue.skipVotes.size}/${requiredVotes}** голосов).`),
       );
       return;
     }
@@ -50,13 +50,13 @@ module.exports = {
       const skipped = queue.skip();
       await reply(
         embeds.success(
-          `⏭️ Голосование успешно (**${requiredVotes}/${requiredVotes}** голосов)! Пропущено: **${truncate(skipped.title, 70)}**`,
+          `Голосование успешно (**${requiredVotes}/${requiredVotes}** голосов)! Пропущено: **${truncate(skipped.title, 70)}**`,
         ),
       );
     } else {
       await reply(
         embeds.info(
-          `🗳️ Голос за пропуск трека принят (**${queue.skipVotes.size}/${requiredVotes}** голосов).\n` +
+          `Голос за пропуск трека принят (**${queue.skipVotes.size}/${requiredVotes}** голосов).\n` +
             `Напишите \`${prefix}skip\`, чтобы поддержать пропуск.`,
         ),
       );

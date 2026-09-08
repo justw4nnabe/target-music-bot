@@ -28,7 +28,7 @@ module.exports = {
       displayName: message.member?.displayName ?? message.author.username,
     };
 
-    const statusNotice = await message.channel.send({ embeds: [embeds.info('🔎 Выполняю поиск…')] });
+    const statusNotice = await message.channel.send({ embeds: [embeds.info('Выполняю поиск…')] });
 
     let results;
     try {

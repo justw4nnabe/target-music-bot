@@ -19,6 +19,6 @@ module.exports = {
       return;
     }
 
-    await reply(embeds.success(`🗑️ Очередь очищена: удалено **${count}** ${tracksWord(count)}.`));
+    await reply(embeds.success(`Очередь очищена: удалено **${count}** ${tracksWord(count)}.`));
   },
 };

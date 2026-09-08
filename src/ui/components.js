@@ -18,44 +18,35 @@ const LOOP_STYLE = {
   queue: ButtonStyle.Primary,
 };
 
-const LOOP_EMOJI = {
-  off: '🔁',
-  track: '🔂',
-  queue: '🔁',
-};
 
 function playerRow(queue, disabled = false) {
   const paused = Boolean(queue?.paused);
   const loopMode = queue?.loopMode ?? 'off';
+  const loopLabel = loopMode === 'track' ? 'Повтор: трек' : loopMode === 'queue' ? 'Повтор: очередь' : 'Повтор';
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(IDS.toggle)
-      .setEmoji(paused ? '▶️' : '⏸️')
       .setLabel(paused ? 'Играть' : 'Пауза')
       .setStyle(paused ? ButtonStyle.Success : ButtonStyle.Secondary)
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(IDS.skip)
-      .setEmoji('⏭️')
       .setLabel('Скип')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(IDS.stop)
-      .setEmoji('⏹️')
       .setLabel('Стоп')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(IDS.loop)
-      .setEmoji(LOOP_EMOJI[loopMode])
-      .setLabel('Повтор')
+      .setLabel(loopLabel)
       .setStyle(LOOP_STYLE[loopMode])
       .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId(IDS.queue)
-      .setEmoji('📜')
       .setLabel('Очередь')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled),
@@ -66,7 +57,7 @@ function queueRow(page, totalPages) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`${IDS.queuePrev}:${page}`)
-      .setEmoji('◀️')
+      .setLabel('Назад')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 1),
     new ButtonBuilder()
@@ -76,7 +67,7 @@ function queueRow(page, totalPages) {
       .setDisabled(true),
     new ButtonBuilder()
       .setCustomId(`${IDS.queueNext}:${page}`)
-      .setEmoji('▶️')
+      .setLabel('Вперёд')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages),
   );
@@ -95,7 +86,7 @@ function searchRow(count = 5) {
   row.addComponents(
     new ButtonBuilder()
       .setCustomId('search:cancel')
-      .setEmoji('❌')
+      .setLabel('Отмена')
       .setStyle(ButtonStyle.Secondary),
   );
   return row;

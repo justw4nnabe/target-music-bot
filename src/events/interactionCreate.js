@@ -52,14 +52,14 @@ async function handleButton(client, interaction) {
     case components.IDS.skip: {
       const track = queue.skip();
       await interaction.reply({
-        content: `⏭️ ${interaction.user} пропустил **${track.title.slice(0, 80)}**`,
+        content: `${interaction.user} пропустил **${track.title.slice(0, 80)}**`,
       });
       return;
     }
 
     case components.IDS.stop: {
       await queue.stop();
-      await interaction.reply({ content: `⏹️ ${interaction.user} остановил воспроизведение.` });
+      await interaction.reply({ content: `${interaction.user} остановил воспроизведение.` });
       return;
     }
 

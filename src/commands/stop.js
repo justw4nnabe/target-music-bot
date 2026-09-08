@@ -12,6 +12,6 @@ module.exports = {
 
   async execute({ queue, reply }) {
     await queue.stop();
-    await reply(embeds.success('⏹️ Воспроизведение остановлено, очередь очищена.'));
+    await reply(embeds.success('Воспроизведение остановлено, очередь очищена.'));
   },
 };

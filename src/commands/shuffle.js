@@ -13,6 +13,6 @@ module.exports = {
 
   async execute({ queue, reply }) {
     const count = queue.shuffle();
-    await reply(embeds.success(`🔀 Перемешал ${count} ${tracksWord(count)} в очереди.`));
+    await reply(embeds.success(`Перемешал ${count} ${tracksWord(count)} в очереди.`));
   },
 };

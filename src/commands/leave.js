@@ -13,7 +13,7 @@ module.exports = {
   async execute({ queue, reply }) {
     if (!queue) throw new UserError('Я и так не в голосовом канале.');
 
-    await reply(embeds.success('👋 Вышел из голосового канала.'));
+    await reply(embeds.success('Вышел из голосового канала.'));
     await queue.destroy('command');
   },
 };

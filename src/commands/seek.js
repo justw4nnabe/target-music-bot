@@ -24,7 +24,7 @@ module.exports = {
     const track = queue.current;
     const position = await queue.seek(seconds);
     await reply(
-      embeds.success(`⏩ Перемотал **${truncate(track.title, 60)}** на \`${formatDuration(position)}\`.`),
+      embeds.success(`Перемотал **${truncate(track.title, 60)}** на \`${formatDuration(position)}\`.`),
     );
   },
 };

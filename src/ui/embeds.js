@@ -45,15 +45,15 @@ function base(color) {
 }
 
 function error(text) {
-  return base(COLORS.danger).setDescription(`❌ ${text}`);
+  return base(COLORS.danger).setDescription(text);
 }
 
 function warning(text) {
-  return base(COLORS.warning).setDescription(`⚠️ ${text}`);
+  return base(COLORS.warning).setDescription(text);
 }
 
 function success(text) {
-  return base(COLORS.success).setDescription(`✅ ${text}`);
+  return base(COLORS.success).setDescription(text);
 }
 
 function info(text) {
@@ -64,7 +64,6 @@ function trackStarted(track) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
       { name: 'Источник', value: sourceLabel(track), inline: true },
@@ -89,7 +88,7 @@ function nowPlaying(queue) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: queue.paused ? 'На паузе' : 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}\n\n${timeline}`)
+    .setDescription(timeline)
     .addFields(
       { name: 'Громкость', value: `${queue.volume}%`, inline: true },
       { name: 'Повтор', value: LOOP_LABELS[queue.loopMode], inline: true },
@@ -106,10 +105,9 @@ function addedTrack(track, position) {
   const embed = base(COLORS.success)
     .setAuthor({ name: position > 0 ? 'Добавлено в очередь' : 'Выбран трек' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
-      { name: 'Позиция', value: position > 0 ? `#${position}` : '▶️ играет сейчас', inline: true },
+      { name: 'Позиция', value: position > 0 ? `#${position}` : 'играет сейчас', inline: true },
       { name: 'Источник', value: sourceLabel(track), inline: true },
     )
     .setFooter({ text: requesterLine(track) });
@@ -149,7 +147,7 @@ function queueList(queue, page = 1) {
   const sections = [];
 
   if (queue.current) {
-    const status = queue.paused ? '⏸️ **Сейчас на паузе:**' : '▶️ **Сейчас играет:**';
+    const status = queue.paused ? '**Сейчас на паузе:**' : '**Сейчас играет:**';
     sections.push(`${status}\n${trackLink(queue.current, 65)} \`${formatDuration(queue.current.duration)}\``);
   }
 

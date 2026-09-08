@@ -7,6 +7,15 @@ const { truncate } = require('../utils/format');
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
+function cleanAuthor(author) {
+  if (!author) return '';
+  return author
+    .replace(/\s*-\s*topic$/i, '')
+    .replace(/\s*vevo$/i, '')
+    .replace(/\s*official\s*(?:channel)?$/i, '')
+    .trim();
+}
+
 function cleanTitle(str) {
   return str
     .replace(/\s*[\(\[](?:official|music|video|audio|lyrics|hd|4k|remastered|lyric video|visualizer|soundtrack|ost)[^\)\]]*[\)\]]/gi, '')
@@ -132,15 +141,24 @@ module.exports = {
       if (!queue?.current) {
         throw new UserError(`Укажи название песни или включи трек. Например: \`${prefix}lyrics Shape of You\`.`);
       }
-      searchTerm = queue.current.title;
-      if (queue.current.author && queue.current.author !== 'YouTube' && queue.current.author !== 'SoundCloud') {
-        searchTerm = `${queue.current.author} ${searchTerm}`;
+      const title = queue.current.title;
+      const rawAuthor = queue.current.author;
+      const author = cleanAuthor(rawAuthor);
+      const titleLower = title.toLowerCase();
+      const authorLower = author.toLowerCase();
+      const titleHasAuthor = author && author !== 'YouTube' && author !== 'SoundCloud' && (titleLower.includes(authorLower) || (authorLower.length > 3 && titleLower.includes(authorLower.slice(0, -1))));
+      const titleHasArtistFormat = /^[^-–—:]+[-–—:]/.test(title);
+
+      if (author && author !== 'YouTube' && author !== 'SoundCloud' && !titleHasAuthor && !titleHasArtistFormat) {
+        searchTerm = `${author} ${title}`;
+      } else {
+        searchTerm = title;
       }
     }
 
     const displayTerm = cleanTitle(searchTerm);
     const statusNotice = await message.channel.send({
-      embeds: [embeds.info(`🔎 Ищу текст на Genius.com для «${truncate(displayTerm, 50)}»…`)],
+      embeds: [embeds.info(`Ищу текст на Genius.com для «${truncate(displayTerm, 50)}»…`)],
     });
 
     try {

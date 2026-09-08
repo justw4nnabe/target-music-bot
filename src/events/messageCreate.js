@@ -79,7 +79,6 @@ module.exports = {
     }
 
     if (onCooldown(message.author.id)) {
-      await message.react('⏳').catch(() => {});
       return;
     }
 
