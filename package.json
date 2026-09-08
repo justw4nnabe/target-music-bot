@@ -1,0 +1,31 @@
+{
+  "name": "targetmusicbot",
+  "version": "1.0.0",
+  "description": "Discord music bot (prefix commands, YouTube/Spotify/SoundCloud via yt-dlp)",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "setup": "node scripts/install-ytdlp.js",
+    "doctor": "node scripts/doctor.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "libsodium-wrappers": "^0.7.13",
+    "opusscript": "^0.0.8",
+    "prism-media": "^1.3.5",
+    "spotify-web-api-node": "^5.0.2"
+  },
+  "optionalDependencies": {
+    "@discordjs/opus": "^0.10.0",
+    "ffmpeg-static": "^5.2.0",
+    "sodium-native": "^4.1.1"
+  },
+  "private": true,
+  "license": "MIT"
+}
