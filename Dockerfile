@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # Установка системных утилит: ffmpeg, ca-certificates, curl, python3
 RUN apt-get update && apt-get install -y --no-install-recommends \
