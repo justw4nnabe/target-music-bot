@@ -1,5 +1,6 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
 const embeds = require('../ui/embeds');
 const { UserError } = require('../utils/errors');
 const { truncate } = require('../utils/format');
@@ -159,6 +160,7 @@ module.exports = {
     const displayTerm = cleanTitle(searchTerm);
     const statusNotice = await message.channel.send({
       embeds: [embeds.info(`Ищу текст на Genius.com для «${truncate(displayTerm, 50)}»…`)],
+      flags: MessageFlags.SuppressNotifications,
     });
 
     try {

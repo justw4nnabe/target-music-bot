@@ -13,7 +13,7 @@ const {
   VoiceConnectionDisconnectReason,
 } = require('@discordjs/voice');
 
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, MessageFlags } = require('discord.js');
 
 const config = require('../../config');
 const logger = require('../utils/logger');
@@ -101,10 +101,11 @@ class MusicQueue {
   async send(payload) {
     if (!this.textChannel) return null;
     try {
-      const body = payload instanceof EmbedBuilder ? { embeds: [payload] } : payload;
+      const body = payload instanceof EmbedBuilder ? { embeds: [payload] } : { ...payload };
       if (Array.isArray(body?.components)) {
         body.components = body.components.flat();
       }
+      body.flags = (body.flags || 0) | MessageFlags.SuppressNotifications;
       return await this.textChannel.send(body);
     } catch (error) {
       logger.warn(`[${this.guildId}] Не удалось отправить сообщение: ${error.message}`);

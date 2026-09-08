@@ -1,6 +1,6 @@
 'use strict';
 
-const { Events, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { Events, EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 
 const config = require('../../config');
 const embeds = require('../ui/embeds');
@@ -74,7 +74,10 @@ module.exports = {
     const channelPermissions = message.channel.permissionsFor(message.guild.members.me);
     if (!channelPermissions?.has(PermissionFlagsBits.SendMessages)) return;
     if (!channelPermissions.has(PermissionFlagsBits.EmbedLinks)) {
-      await message.channel.send('Мне нужно право «Встраивать ссылки» (Embed Links), иначе я не могу отвечать.').catch(() => {});
+      await message.channel.send({
+        content: 'Мне нужно право «Встраивать ссылки» (Embed Links), иначе я не могу отвечать.',
+        flags: MessageFlags.SuppressNotifications,
+      }).catch(() => {});
       return;
     }
 
@@ -84,8 +87,12 @@ module.exports = {
 
     const reply = async (payload) => {
       const data = payload instanceof EmbedBuilder ? { embeds: [payload] } : payload;
-      const options = { ...data, allowedMentions: { repliedUser: false } };
-      return message.reply(options).catch(() => message.channel.send(data).catch(() => null));
+      const options = {
+        ...data,
+        allowedMentions: { repliedUser: false },
+        flags: (data?.flags || 0) | MessageFlags.SuppressNotifications,
+      };
+      return message.reply(options).catch(() => message.channel.send(options).catch(() => null));
     };
 
     try {

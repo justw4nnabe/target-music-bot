@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('../../config');
+const { MessageFlags } = require('discord.js');
 const embeds = require('../ui/embeds');
 const components = require('../ui/components');
 const youtube = require('../services/sources/youtube');
@@ -28,7 +29,10 @@ module.exports = {
       displayName: message.member?.displayName ?? message.author.username,
     };
 
-    const statusNotice = await message.channel.send({ embeds: [embeds.info('Выполняю поиск…')] });
+    const statusNotice = await message.channel.send({
+      embeds: [embeds.info('Выполняю поиск…')],
+      flags: MessageFlags.SuppressNotifications,
+    });
 
     let results;
     try {

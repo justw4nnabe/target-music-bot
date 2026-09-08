@@ -54,7 +54,7 @@ async function handleButton(client, interaction) {
       if (isOtherTrackWithAutoplay && !queue.autoplay) {
         await interaction.reply({
           content: 'На этом треке автовоспроизведение уже выключено.',
-          flags: MessageFlags.Ephemeral,
+          flags: MessageFlags.Ephemeral | MessageFlags.SuppressNotifications,
         });
         return;
       }
@@ -67,13 +67,17 @@ async function handleButton(client, interaction) {
       const track = queue.skip();
       await interaction.reply({
         content: `${interaction.user} пропустил **${track.title.slice(0, 80)}**`,
+        flags: MessageFlags.SuppressNotifications,
       });
       return;
     }
 
     case components.IDS.stop: {
       await queue.stop();
-      await interaction.reply({ content: `${interaction.user} остановил воспроизведение.` });
+      await interaction.reply({
+        content: `${interaction.user} остановил воспроизведение.`,
+        flags: MessageFlags.SuppressNotifications,
+      });
       return;
     }
 
@@ -82,7 +86,7 @@ async function handleButton(client, interaction) {
       await interaction.reply({
         embeds: [embed],
         components: totalPages > 1 ? [components.queueRow(page, totalPages)] : [],
-        flags: MessageFlags.Ephemeral,
+        flags: MessageFlags.Ephemeral | MessageFlags.SuppressNotifications,
       });
       return;
     }
@@ -113,7 +117,10 @@ module.exports = {
     } catch (error) {
       if (!error?.isUserError) logger.error('Ошибка обработки кнопки:', error);
 
-      const payload = { embeds: [embeds.error(toUserMessage(error))], flags: MessageFlags.Ephemeral };
+      const payload = {
+        embeds: [embeds.error(toUserMessage(error))],
+        flags: MessageFlags.Ephemeral | MessageFlags.SuppressNotifications,
+      };
       if (interaction.deferred || interaction.replied) {
         await interaction.followUp(payload).catch(() => {});
       } else {

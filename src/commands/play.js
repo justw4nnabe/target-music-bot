@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('../../config');
+const { MessageFlags } = require('discord.js');
 const embeds = require('../ui/embeds');
 const resolver = require('../services/resolver');
 const { UserError } = require('../utils/errors');
@@ -28,7 +29,10 @@ module.exports = {
       displayName: message.member?.displayName ?? message.author.username,
     };
 
-    const notice = await message.channel.send({ embeds: [embeds.info('Ищу…')] });
+    const notice = await message.channel.send({
+      embeds: [embeds.info('Ищу…')],
+      flags: MessageFlags.SuppressNotifications,
+    });
 
     try {
       const result = await resolver.resolveQuery(query, requestedBy);
