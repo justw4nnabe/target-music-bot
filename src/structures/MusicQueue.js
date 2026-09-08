@@ -63,13 +63,19 @@ class MusicQueue {
     this.nowPlayingMessage = null;
 
     this.player = createAudioPlayer({
-      behaviors: { noSubscriberBehavior: NoSubscriberBehavior.Pause, maxMissedFrames: 50 },
+      behaviors: {
+        noSubscriber: NoSubscriberBehavior.Play,
+        maxMissedFrames: 50,
+      },
     });
 
+    this.player.on('stateChange', (oldState, newState) => {
+      logger.info(`[${this.guildId}] Состояние плеера: ${oldState.status} -> ${newState.status}`);
+    });
     this.player.on(AudioPlayerStatus.Idle, () => this.handleIdle());
     this.player.on('error', (error) => this.handlePlayerError(error));
     this.player.on(AudioPlayerStatus.Playing, () => {
-      logger.debug(`[${this.guildId}] Плеер: воспроизведение`);
+      logger.info(`[${this.guildId}] Плеер: воспроизведение началось`);
     });
   }
 
@@ -145,8 +151,13 @@ class MusicQueue {
       throw new UserError('Не удалось подключиться к голосовому каналу (таймаут ответа Discord). Проверь права роли бота (Администратор) и попробуй сменить регион голосового канала на Роттердам/Франкфурт.');
     }
 
+    if (this.subscription) {
+      try {
+        this.subscription.unsubscribe();
+      } catch {}
+    }
     this.subscription = this.connection.subscribe(this.player);
-    logger.info(`[${this.guildId}] Подключился к каналу ${voiceChannel.name}`);
+    logger.info(`[${this.guildId}] Подключился к каналу ${voiceChannel.name} и подписал плеер`);
   }
 
   attachConnectionHandlers(connection) {
