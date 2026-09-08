@@ -32,6 +32,7 @@ function toUserMessage(error) {
   for (const [pattern, message] of PATTERNS) {
     if (pattern.test(haystack)) return message ?? error.message;
   }
+  if (error.message) return `Ошибка источника: ${error.message}`;
   return 'Что-то пошло не так при обработке запроса. Попробуй другой трек или ссылку.';
 }
 

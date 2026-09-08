@@ -47,13 +47,12 @@ module.exports = {
       const { added } = queue.enqueue([track]);
       if (!added) throw new UserError(`Очередь заполнена (лимит ${config.queue.maxSize}).`);
 
+      await notice.edit({ embeds: [embeds.addedTrack(track, wasIdle ? 0 : queue.tracks.length)] });
+
       if (wasIdle) {
-        await notice.delete().catch(() => {});
         await queue.start();
         return;
       }
-
-      await notice.edit({ embeds: [embeds.addedTrack(track, queue.tracks.length)] });
     } catch (error) {
       await notice.delete().catch(() => {});
       if (queue.isEmpty) queue.scheduleIdleLeave();

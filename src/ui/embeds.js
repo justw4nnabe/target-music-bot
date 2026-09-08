@@ -64,7 +64,7 @@ function trackStarted(track) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`**${escapeMarkdown(truncate(track.author, 80))}**`)
+    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
       { name: 'Источник', value: sourceLabel(track), inline: true },
@@ -89,7 +89,7 @@ function nowPlaying(queue) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: queue.paused ? 'На паузе' : 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`**${escapeMarkdown(truncate(track.author, 80))}**\n\n${timeline}`)
+    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}\n\n${timeline}`)
     .addFields(
       { name: 'Громкость', value: `${queue.volume}%`, inline: true },
       { name: 'Повтор', value: LOOP_LABELS[queue.loopMode], inline: true },
@@ -104,15 +104,17 @@ function nowPlaying(queue) {
 
 function addedTrack(track, position) {
   const embed = base(COLORS.success)
-    .setAuthor({ name: 'Добавлено в очередь' })
-    .setDescription(`${trackLink(track, 80)}\n**${escapeMarkdown(truncate(track.author, 80))}**`)
+    .setAuthor({ name: position > 0 ? 'Добавлено в очередь' : 'Выбран трек' })
+    .setTitle(truncate(track.title, 100))
+    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
-      { name: 'Позиция', value: position > 0 ? `#${position}` : 'играет сейчас', inline: true },
+      { name: 'Позиция', value: position > 0 ? `#${position}` : '▶️ играет сейчас', inline: true },
       { name: 'Источник', value: sourceLabel(track), inline: true },
     )
     .setFooter({ text: requesterLine(track) });
 
+  if (track.url) embed.setURL(track.url);
   if (track.thumbnail) embed.setThumbnail(track.thumbnail);
   return embed;
 }
