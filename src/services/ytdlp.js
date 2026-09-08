@@ -129,6 +129,8 @@ function commonArgs() {
     '3',
     '--socket-timeout',
     String(config.ytdlp.socketTimeout),
+    '--extractor-args',
+    'youtube:player_client=android,web',
   ];
 
   if (config.ytdlp.cookiesFile) args.push('--cookies', config.ytdlp.cookiesFile);

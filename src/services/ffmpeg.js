@@ -108,14 +108,24 @@ function createPcmStream({ url, headers = {}, seek = 0 }) {
       return new Promise((resolve, reject) => {
         const cleanup = () => {
           clearTimeout(timer);
+          child.stdout.off('data', onData);
           child.stdout.off('readable', onReadable);
           child.off('close', onClose);
           child.off('error', onError);
         };
 
-        const onReadable = () => {
+        const onData = (chunk) => {
           cleanup();
+          child.stdout.unshift(chunk);
+          child.stdout.pause();
           resolve();
+        };
+
+        const onReadable = () => {
+          if (child.stdout.readableLength > 0) {
+            cleanup();
+            resolve();
+          }
         };
 
         const onClose = (code) => {
@@ -141,6 +151,13 @@ function createPcmStream({ url, headers = {}, seek = 0 }) {
           return;
         }
 
+        if (child.stdout.readableLength > 0) {
+          cleanup();
+          resolve();
+          return;
+        }
+
+        child.stdout.once('data', onData);
         child.stdout.once('readable', onReadable);
         child.once('close', onClose);
         child.once('error', onError);
