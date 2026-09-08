@@ -13,6 +13,7 @@ module.exports = {
   async execute({ message, queues, reply }) {
     const queue = queues.ensure({ guild: message.guild, textChannel: message.channel });
     const isEnabled = queue.toggleAutoplay();
+    await queue.refreshNowPlaying();
 
     if (isEnabled) {
       await reply(

@@ -102,6 +102,9 @@ class MusicQueue {
     if (!this.textChannel) return null;
     try {
       const body = payload instanceof EmbedBuilder ? { embeds: [payload] } : payload;
+      if (Array.isArray(body?.components)) {
+        body.components = body.components.flat();
+      }
       return await this.textChannel.send(body);
     } catch (error) {
       logger.warn(`[${this.guildId}] Не удалось отправить сообщение: ${error.message}`);
@@ -381,15 +384,19 @@ class MusicQueue {
   async announce(track) {
     if (this.destroyed) return;
 
+    if (this.autoplay) {
+      track.autoplayActiveOnStart = true;
+    }
+
     await this.retireNowPlaying();
-    const message = await this.send({ embeds: [embeds.trackStarted(track)], components: [components.playerRow(this)] });
+    const message = await this.send({ embeds: [embeds.trackStarted(track)], components: components.playerRows(this) });
     this.nowPlayingMessage = message;
   }
 
   async refreshNowPlaying() {
     if (!this.nowPlayingMessage || this.destroyed) return;
     try {
-      await this.nowPlayingMessage.edit({ components: [components.playerRow(this)] });
+      await this.nowPlayingMessage.edit({ components: components.playerRows(this) });
     } catch {
       this.nowPlayingMessage = null;
     }
@@ -401,7 +408,7 @@ class MusicQueue {
     if (!message) return;
 
     try {
-      await message.edit({ components: [components.playerRow(this, true)] });
+      await message.edit({ components: components.playerRows(this, true) });
     } catch {}
   }
 

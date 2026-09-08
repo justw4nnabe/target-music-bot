@@ -39,13 +39,27 @@ async function handleButton(client, interaction) {
     case components.IDS.toggle: {
       if (queue.paused) queue.resume();
       else queue.pause();
-      await interaction.update({ components: [components.playerRow(queue)] });
+      await interaction.update({ components: components.playerRows(queue) });
       return;
     }
 
     case components.IDS.loop: {
       queue.cycleLoop();
-      await interaction.update({ components: [components.playerRow(queue)] });
+      await interaction.update({ components: components.playerRows(queue) });
+      return;
+    }
+
+    case components.IDS.autoplay: {
+      const isOtherTrackWithAutoplay = Boolean(queue.current?.isAutoplay || queue.current?.autoplayActiveOnStart);
+      if (isOtherTrackWithAutoplay && !queue.autoplay) {
+        await interaction.reply({
+          content: 'На этом треке автовоспроизведение уже выключено.',
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      queue.toggleAutoplay();
+      await interaction.update({ components: components.playerRows(queue) });
       return;
     }
 

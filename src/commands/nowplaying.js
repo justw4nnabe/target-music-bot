@@ -12,6 +12,6 @@ module.exports = {
 
   async execute({ queue, reply }) {
     if (!queue.current) throw new UserError('Сейчас ничего не играет.');
-    await reply({ embeds: [embeds.nowPlaying(queue)], components: [components.playerRow(queue)] });
+    await reply({ embeds: [embeds.nowPlaying(queue)], components: components.playerRows(queue) });
   },
 };
