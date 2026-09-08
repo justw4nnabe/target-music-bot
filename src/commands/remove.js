@@ -16,7 +16,7 @@ module.exports = {
   async execute({ queue, args, reply, prefix }) {
     const position = Number.parseInt(args[0], 10);
     if (!Number.isFinite(position)) {
-      throw new UserError(`Укажи номер трека из \`${prefix}queue\`. Например: \`${prefix}remove 3\``);
+      throw new UserError(`Укажи номер трека из **${prefix}queue**. Например: **${prefix}remove 3**`);
     }
 
     const track = queue.remove(position);

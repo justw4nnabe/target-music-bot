@@ -16,7 +16,7 @@ module.exports = {
 
   async execute({ message, query, queues, voiceChannel, prefix }) {
     if (!query) {
-      throw new UserError(`Укажи, что найти. Например: \`${prefix}search imagine dragons\`.`);
+      throw new UserError(`Укажи, что найти. Например: **${prefix}search imagine dragons**.`);
     }
 
     const queue = queues.ensure({ guild: message.guild, textChannel: message.channel });

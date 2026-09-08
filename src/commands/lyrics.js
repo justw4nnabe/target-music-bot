@@ -139,7 +139,7 @@ module.exports = {
 
     if (!searchTerm) {
       if (!queue?.current) {
-        throw new UserError(`Укажи название песни или включи трек. Например: \`${prefix}lyrics Shape of You\`.`);
+        throw new UserError(`Укажи название песни или включи трек. Например: **${prefix}lyrics Shape of You**.`);
       }
       const title = queue.current.title;
       const rawAuthor = queue.current.author;

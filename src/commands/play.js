@@ -16,7 +16,7 @@ module.exports = {
 
   async execute({ message, query, queues, voiceChannel, prefix }) {
     if (!query) {
-      throw new UserError(`Укажи, что включить. Например: \`${prefix}play группа крови\` или ссылку на трек.`);
+      throw new UserError(`Укажи, что включить. Например: **${prefix}play группа крови** или ссылку на трек.`);
     }
 
     const queue = queues.ensure({ guild: message.guild, textChannel: message.channel });

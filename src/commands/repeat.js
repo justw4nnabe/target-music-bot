@@ -56,7 +56,7 @@ module.exports = {
 
     const requested = ALIASES[args[0].toLowerCase()];
     if (!requested) {
-      throw new UserError('Доступные режимы: `current` (текущий трек), `queue` (очередь), `disable` (выключить).');
+      throw new UserError('Доступные режимы: **current** (текущий трек), **queue** (очередь), **disable** (выключить).');
     }
 
     const mode = queue.setLoop(requested);

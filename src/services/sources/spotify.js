@@ -44,7 +44,7 @@ function parse(input) {
 async function client() {
   if (!isConfigured()) {
     throw new UserError(
-      'Spotify не настроен. Добавь `SPOTIFY_CLIENT_ID` и `SPOTIFY_CLIENT_SECRET` в `.env` — либо пришли ссылку на YouTube/SoundCloud.',
+      'Spotify не настроен. Добавь **SPOTIFY_CLIENT_ID** и **SPOTIFY_CLIENT_SECRET** в **.env** — либо пришли ссылку на YouTube/SoundCloud.',
     );
   }
 
@@ -65,7 +65,7 @@ async function client() {
       })
       .catch((error) => {
         logger.error('Не удалось получить токен Spotify:', error.message);
-        throw new UserError('Не удалось авторизоваться в Spotify — проверь `SPOTIFY_CLIENT_ID` и `SPOTIFY_CLIENT_SECRET`.');
+        throw new UserError('Не удалось авторизоваться в Spotify — проверь **SPOTIFY_CLIENT_ID** и **SPOTIFY_CLIENT_SECRET**.');
       })
       .finally(() => {
         pendingAuth = null;

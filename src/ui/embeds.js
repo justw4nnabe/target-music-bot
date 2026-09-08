@@ -82,7 +82,7 @@ function nowPlaying(queue) {
   const position = queue.getPosition();
   const bar = progressBar(position, track.duration, 22);
   const timeline = track.duration
-    ? `\`${formatDuration(position)}\` ${bar} \`${formatDuration(track.duration)}\``
+    ? `**${formatDuration(position)}** ${bar} **${formatDuration(track.duration)}**`
     : bar;
 
   const embed = base(COLORS.primary)
@@ -148,15 +148,15 @@ function queueList(queue, page = 1) {
 
   if (queue.current) {
     const status = queue.paused ? '**Сейчас на паузе:**' : '**Сейчас играет:**';
-    sections.push(`${status}\n${trackLink(queue.current, 65)} \`${formatDuration(queue.current.duration)}\``);
+    sections.push(`${status}\n${trackLink(queue.current, 65)} — ${formatDuration(queue.current.duration)}`);
   }
 
   if (!slice.length) {
-    sections.push('**Очередь:**\n*Дальше ничего нет — добавь треки командой `' + config.prefix + 'play`.*');
+    sections.push(`**Очередь:**\n*Дальше ничего нет — добавь треки командой **${config.prefix}play**.*`);
   } else {
     const lines = slice.map((track, index) => {
       const number = start + index + 1;
-      return `\`${String(number).padStart(2, ' ')}.\` ${trackLink(track, 52)} \`${formatDuration(track.duration)}\``;
+      return `**${number}.** ${trackLink(track, 52)} — ${formatDuration(track.duration)}`;
     });
     sections.push(`**Очередь:**\n${lines.join('\n')}`);
   }
@@ -172,14 +172,14 @@ function queueList(queue, page = 1) {
 }
 
 function searchResults(tracks) {
-  const lines = tracks.map((track, index) => `\`${index + 1}.\` ${trackLink(track, 55)} \`${formatDuration(track.duration)}\``);
+  const lines = tracks.map((track, index) => `**${index + 1}.** ${trackLink(track, 55)} — ${formatDuration(track.duration)}`);
   return base(COLORS.primary).setAuthor({ name: 'Результаты поиска' }).setDescription(lines.join('\n'));
 }
 
 function help(commands, prefix) {
   const lines = commands.map((command) => {
     const usage = command.usage ? ` ${command.usage}` : '';
-    return `\`${prefix}${command.name}${usage}\` — ${command.description}`;
+    return `**${prefix}${command.name}${usage}** — ${command.description}`;
   });
 
   return base(COLORS.primary)
@@ -193,12 +193,12 @@ function commandHelp(command, prefix) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: `Команда: ${prefix}${command.name}` })
     .setDescription(command.description || 'Нет описания')
-    .addFields({ name: 'Использование', value: `\`${prefix}${command.name}${usage}\``, inline: false });
+    .addFields({ name: 'Использование', value: `**${prefix}${command.name}${usage}**`, inline: false });
 
   if (command.aliases && command.aliases.length) {
     embed.addFields({
       name: 'Алиасы',
-      value: command.aliases.map((a) => `\`${prefix}${a}\``).join(', '),
+      value: command.aliases.map((a) => `**${prefix}${a}**`).join(', '),
       inline: false,
     });
   }

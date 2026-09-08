@@ -12,7 +12,7 @@ module.exports = {
 
   async execute({ queue, args, reply, prefix }) {
     if (!args.length) {
-      await reply(embeds.info(`Текущая громкость: **${queue.volume}%**\nИзменить: \`${prefix}volume 40\``));
+      await reply(embeds.info(`Текущая громкость: **${queue.volume}%**\nИзменить: **${prefix}volume 40**`));
       return;
     }
 

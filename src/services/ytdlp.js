@@ -99,7 +99,7 @@ async function detectBinary() {
   }
 
   throw new UserError(
-    'yt-dlp не найден. Запусти `npm run setup` (скачает бинарник в bin/) или `pip install -U yt-dlp`.',
+    'yt-dlp не найден. Запусти **npm run setup** (скачает бинарник в bin/) или **pip install -U yt-dlp**.',
   );
 }
 

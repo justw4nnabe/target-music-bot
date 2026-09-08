@@ -567,7 +567,7 @@ class MusicQueue {
   }
 
   setLoop(mode) {
-    if (!LOOP_MODES.includes(mode)) throw new UserError('Режим повтора: `off`, `track` или `queue`.');
+    if (!LOOP_MODES.includes(mode)) throw new UserError('Режим повтора: **off**, **track** или **queue**.');
     this.loopMode = mode;
     return mode;
   }
@@ -592,7 +592,7 @@ class MusicQueue {
   remove(position) {
     const index = Math.floor(position) - 1;
     if (!Number.isInteger(index) || index < 0 || index >= this.tracks.length) {
-      throw new UserError(`Нет трека на позиции ${position}. В очереди ${this.tracks.length} шт.`);
+      throw new UserError(`Нет трека на позиции **${position}**. В очереди **${this.tracks.length}** шт.`);
     }
     return this.tracks.splice(index, 1)[0];
   }

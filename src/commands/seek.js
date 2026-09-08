@@ -14,17 +14,17 @@ module.exports = {
   requiresQueue: true,
 
   async execute({ queue, query, reply, prefix }) {
-    if (!query) throw new UserError(`Укажи время. Например: \`${prefix}seek 1:30\` или \`${prefix}seek 90\``);
+    if (!query) throw new UserError(`Укажи время. Например: **${prefix}seek 1:30** или **${prefix}seek 90**`);
 
     const seconds = parseDuration(query);
     if (seconds === null) {
-      throw new UserError('Не понял формат времени. Поддерживается `1:30`, `90`, `1m30s`.');
+      throw new UserError('Не понял формат времени. Поддерживается **1:30**, **90**, **1m30s**.');
     }
 
     const track = queue.current;
     const position = await queue.seek(seconds);
     await reply(
-      embeds.success(`Перемотал **${truncate(track.title, 60)}** на \`${formatDuration(position)}\`.`),
+      embeds.success(`Перемотал **${truncate(track.title, 60)}** на **${formatDuration(position)}**.`),
     );
   },
 };

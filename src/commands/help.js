@@ -16,7 +16,7 @@ module.exports = {
       const command = resolvedName ? client.commands.get(resolvedName) : null;
 
       if (!command) {
-        await reply(embeds.warning(`Команда «**${target}**» не найдена. Напиши \`${prefix}help\` для списка всех команд.`));
+        await reply(embeds.warning(`Команда «**${target}**» не найдена. Напиши **${prefix}help** для списка всех команд.`));
         return;
       }
 

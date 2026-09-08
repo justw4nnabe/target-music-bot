@@ -57,7 +57,7 @@ module.exports = {
       await reply(
         embeds.info(
           `Голос за пропуск трека принят (**${queue.skipVotes.size}/${requiredVotes}** голосов).\n` +
-            `Напишите \`${prefix}skip\`, чтобы поддержать пропуск.`,
+            `Напишите **${prefix}skip**, чтобы поддержать пропуск.`,
         ),
       );
     }

@@ -9,7 +9,7 @@ class UserError extends Error {
 }
 
 const PATTERNS = [
-  [/sign in to confirm|not a bot|confirm you.?re not a bot/i, 'YouTube требует подтверждения, что запрос не от бота. Добавь cookies в `.env` (`YTDLP_COOKIES_FROM_BROWSER=chrome`).'],
+  [/sign in to confirm|not a bot|confirm you.?re not a bot/i, 'YouTube требует подтверждения, что запрос не от бота. Добавь cookies в **.env** (**YTDLP_COOKIES_FROM_BROWSER=chrome**).'],
   [/video unavailable|this video is unavailable/i, 'Видео недоступно — возможно, удалено или заблокировано в этом регионе.'],
   [/private video|this playlist is private/i, 'Это приватное видео или плейлист — бот не может его открыть.'],
   [/members[- ]only|join this channel/i, 'Видео доступно только участникам канала.'],

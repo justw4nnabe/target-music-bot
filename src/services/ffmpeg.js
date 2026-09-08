@@ -126,7 +126,7 @@ async function createPcmStream({ url, headers = {}, seek = 0, isYouTube = false,
       if (ytChild) {
         try { ytChild.kill('SIGKILL'); } catch {}
       }
-      throw new UserError('ffmpeg не найден. Установи ffmpeg или укажи путь в `FFMPEG_PATH`.');
+      throw new UserError('ffmpeg не найден. Установи ffmpeg или укажи путь в **FFMPEG_PATH**.');
     }
 
     ytChild.stdout.pipe(ffChild.stdin);
@@ -258,7 +258,7 @@ async function createPcmStream({ url, headers = {}, seek = 0, isYouTube = false,
   try {
     child = spawn(binary, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (error) {
-    throw new UserError('ffmpeg не найден. Установи ffmpeg или укажи путь в `FFMPEG_PATH`.');
+    throw new UserError('ffmpeg не найден. Установи ffmpeg или укажи путь в **FFMPEG_PATH**.');
   }
 
   let stderr = '';
