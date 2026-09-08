@@ -19,7 +19,7 @@ const LOOP_STYLE = {
   queue: ButtonStyle.Primary,
 };
 
-function playerRows(queue, disabled = false) {
+function playerRow(queue, disabled = false) {
   const paused = Boolean(queue?.paused);
   const loopMode = queue?.loopMode ?? 'off';
   const loopLabel = loopMode === 'track' ? 'Повтор: трек' : loopMode === 'queue' ? 'Повтор: очередь' : 'Повтор';
@@ -41,7 +41,7 @@ function playerRows(queue, disabled = false) {
     autoplayDisabled = true;
   }
 
-  const row1 = new ActionRowBuilder().addComponents(
+  return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(IDS.toggle)
       .setLabel(paused ? 'Играть' : 'Пауза')
@@ -57,9 +57,6 @@ function playerRows(queue, disabled = false) {
       .setLabel('Стоп')
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled),
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(IDS.loop)
       .setLabel(loopLabel)
@@ -70,18 +67,11 @@ function playerRows(queue, disabled = false) {
       .setLabel(autoplayLabel)
       .setStyle(autoplayStyle)
       .setDisabled(autoplayDisabled),
-    new ButtonBuilder()
-      .setCustomId(IDS.queue)
-      .setLabel('Очередь')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled),
   );
-
-  return [row1, row2];
 }
 
-function playerRow(queue, disabled = false) {
-  return playerRows(queue, disabled);
+function playerRows(queue, disabled = false) {
+  return [playerRow(queue, disabled)];
 }
 
 function queueRow(page, totalPages) {
