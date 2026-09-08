@@ -4,20 +4,20 @@ const config = require('../../config');
 const { MessageFlags } = require('discord.js');
 const embeds = require('../ui/embeds');
 const components = require('../ui/components');
-const youtube = require('../services/sources/youtube');
+const resolver = require('../services/resolver');
 const { UserError } = require('../utils/errors');
 
 module.exports = {
   name: 'search',
   aliases: ['поиск'],
-  description: 'Поиск треков на YouTube с выбором трека из списка',
-  usage: '<поисковый запрос>',
+  description: 'Поиск треков на SoundCloud или YouTube с выбором трека из списка',
+  usage: '[sc|yt] <поисковый запрос>',
   requiresVoice: true,
   requiresSameChannel: true,
 
   async execute({ message, query, queues, voiceChannel, prefix }) {
     if (!query) {
-      throw new UserError(`Укажи, что найти. Например: **${prefix}search imagine dragons**.`);
+      throw new UserError(`Укажи, что найти. Например: **${prefix}search imagine dragons** или **${prefix}search yt drake**.`);
     }
 
     const queue = queues.ensure({ guild: message.guild, textChannel: message.channel });
@@ -36,7 +36,8 @@ module.exports = {
 
     let results;
     try {
-      results = await youtube.search(query, requestedBy, 5);
+      const searchRes = await resolver.searchTracks(query, requestedBy, 5);
+      results = searchRes.results;
     } catch (error) {
       await statusNotice.delete().catch(() => {});
       throw error;

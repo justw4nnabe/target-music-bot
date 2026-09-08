@@ -46,22 +46,49 @@ async function fetchStream(track) {
   const target = track.playbackUrl ?? track.url;
   if (!target) throw new UserError('У трека нет ссылки на источник.');
 
-  const info = await ytdlp.runJson(['--no-playlist', '--skip-download', '-f', FORMAT, target]);
-  const stream = pickStream(info);
-  if (!stream) throw new UserError('У этого трека SoundCloud нет доступного аудиопотока.');
+  try {
+    const info = await ytdlp.runJson(['--no-playlist', '--skip-download', '-f', FORMAT, target]);
+    const stream = pickStream(info);
+    if (!stream) throw new UserError('У этого трека SoundCloud нет доступного аудиопотока.');
 
-  track.cachedStream = { ...stream, at: Date.now() };
-  return stream;
+    track.cachedStream = { ...stream, at: Date.now() };
+    return stream;
+  } catch (error) {
+    if (/DRM protected/i.test(error.message || error.stderr || '')) {
+      const logger = require('../../utils/logger');
+      logger.warn(`SoundCloud трек защищен DRM («${track.title}»). Переключаюсь на YouTube…`);
+      const youtube = require('./youtube');
+      const ytMatch = await youtube.findBestMatch(track.title, track.requestedBy, track.duration);
+      if (ytMatch) {
+        logger.info(`SoundCloud DRM -> перенаправлен на YouTube: ${ytMatch.url}`);
+        track.playbackUrl = ytMatch.url;
+        return {
+          url: ytMatch.url,
+          targetUrl: ytMatch.url,
+          isYouTube: true,
+          headers: {},
+        };
+      }
+      throw new UserError('Этот трек в SoundCloud защищён DRM, и на YouTube не удалось найти замену.');
+    }
+    throw error;
+  }
 }
 
 function normalize(entry, requestedBy) {
   const url = entry.webpage_url ?? (typeof entry.url === 'string' && /^https?:/i.test(entry.url) ? entry.url : null);
   if (!url) return null;
 
+  let title = entry.title ?? 'Без названия';
+  const author = entry.uploader ?? entry.channel ?? 'SoundCloud';
+  if (author && author !== 'SoundCloud' && !title.toLowerCase().includes(author.toLowerCase())) {
+    title = `${author} - ${title}`;
+  }
+
   return createTrack({
     source: 'soundcloud',
-    title: entry.title ?? 'Без названия',
-    author: entry.uploader ?? entry.channel ?? 'SoundCloud',
+    title,
+    author,
     url,
     duration: Number(entry.duration) || 0,
     thumbnail: thumbnailFor(entry),
@@ -102,8 +129,27 @@ async function getPlaylist(url, requestedBy) {
 }
 
 async function search(query, requestedBy, limit = config.search.resultsLimit) {
-  const info = await ytdlp.runJson(['--flat-playlist', `scsearch${limit}:${query}`]);
-  return (info.entries ?? []).filter(Boolean).map((entry) => normalize(entry, requestedBy)).filter(Boolean);
+  const fetchLimit = Math.max(limit * 2, 5);
+  const info = await ytdlp.runJson(['--flat-playlist', `scsearch${fetchLimit}:${query}`]);
+  const entries = (info.entries ?? []).filter(Boolean);
+  const normalized = entries.map((entry) => normalize(entry, requestedBy)).filter(Boolean);
+  const fullTracks = normalized.filter((t) => !t.duration || t.duration >= 50);
+  return (fullTracks.length ? fullTracks : normalized).slice(0, limit);
 }
 
-module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, fetchStream };
+async function findBestMatch(query, requestedBy, targetDuration = 0) {
+  const results = await search(query, requestedBy, config.search.resultsLimit);
+  if (!results.length) return null;
+  if (!targetDuration) return results[0];
+
+  const scored = results
+    .map((track) => ({ track, delta: track.duration ? Math.abs(track.duration - targetDuration) : Number.MAX_SAFE_INTEGER }))
+    .sort((a, b) => a.delta - b.delta);
+
+  const best = scored[0];
+  if (best.delta <= config.search.durationToleranceSec) return best.track;
+
+  return results[0];
+}
+
+module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream };

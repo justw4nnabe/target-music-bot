@@ -127,6 +127,23 @@ async function getPlaylist(url, requestedBy) {
 
 const { parseDuration } = require('../../utils/format');
 
+const NON_MUSIC_REGEX =
+  /(?:react|реакци|почему|что случилось|разбор|обзор|review|interview|интервью|podcast|подкаст|сколько бы|gameplay|геймплей|vlog|влог|shorts|разоблачени|stream|стрим|compilation|компиляц|mix\s*#|workout|hours?|минут|transition|конфликт|драка|истори|новости|news|тир-лист|tier\s*list|выбор|соловьев|политик|реч|шок|взрыв|скандал|playlist|chillout|vol\s*\d+|триллер|боевик|комедия|фильм|кино|сериал|movie|film|trailer|трейлер|beef|биф|джем|jam\s*–)/i;
+
+function extractVideoId(input) {
+  if (!input) return null;
+  const match = String(input).match(/(?:v=|youtu\.be\/|\/embed\/|\/v\/|shorts\/)([\w-]{11})/i);
+  return match ? match[1] : null;
+}
+
+function isLikelyMusic(title, author = '', duration = 0, videoId = '') {
+  if (!title) return false;
+  if (videoId && /^RD/i.test(videoId)) return false;
+  if (NON_MUSIC_REGEX.test(title) || NON_MUSIC_REGEX.test(author)) return false;
+  if (duration > 0 && (duration < 55 || duration > 600)) return false;
+  return true;
+}
+
 async function searchFast(query, requestedBy, limit = 5) {
   try {
     const url = 'https://www.youtube.com/youtubei/v1/search?prettyPrint=false';
@@ -158,7 +175,7 @@ async function searchFast(query, requestedBy, limit = 5) {
       json.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents?.[0]
         ?.itemSectionRenderer?.contents || [];
 
-    const tracks = [];
+    const rawCandidates = [];
     for (const item of section) {
       const vr = item.videoRenderer;
       if (!vr || !vr.videoId) continue;
@@ -169,21 +186,21 @@ async function searchFast(query, requestedBy, limit = 5) {
       const duration = lengthText ? parseDuration(lengthText) || 0 : 0;
       const thumb = vr.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${vr.videoId}/hqdefault.jpg`;
 
-      tracks.push(
-        createTrack({
-          source: 'youtube',
-          title,
-          author,
-          url: `https://www.youtube.com/watch?v=${vr.videoId}`,
-          duration,
-          thumbnail: thumb,
-          requestedBy,
-          streamProvider: fetchStream,
-        }),
-      );
-
-      if (tracks.length >= limit) break;
+      rawCandidates.push({
+        source: 'youtube',
+        title,
+        author,
+        url: `https://www.youtube.com/watch?v=${vr.videoId}`,
+        duration,
+        thumbnail: thumb,
+        requestedBy,
+        streamProvider: fetchStream,
+      });
     }
+
+    const musicOnly = rawCandidates.filter((c) => isLikelyMusic(c.title, c.author, c.duration));
+    const chosen = musicOnly.length ? musicOnly : rawCandidates;
+    const tracks = chosen.slice(0, limit).map((c) => createTrack(c));
 
     return tracks.length ? tracks : null;
   } catch (error) {
@@ -196,9 +213,11 @@ async function search(query, requestedBy, limit = config.search.resultsLimit) {
   const fastResults = await searchFast(query, requestedBy, limit);
   if (fastResults && fastResults.length) return fastResults;
 
-  const info = await ytdlp.runJson(['--flat-playlist', `ytsearch${limit}:${query}`]);
+  const info = await ytdlp.runJson(['--flat-playlist', `ytsearch${limit * 2}:${query}`]);
   const entries = (info.entries ?? []).filter(Boolean);
-  return entries.map((entry) => normalize(entry, requestedBy)).filter(Boolean);
+  const normalized = entries.map((entry) => normalize(entry, requestedBy)).filter(Boolean);
+  const musicOnly = normalized.filter((t) => isLikelyMusic(t.title, t.author, t.duration));
+  return (musicOnly.length ? musicOnly : normalized).slice(0, limit);
 }
 
 async function findBestMatch(query, requestedBy, targetDuration = 0) {
@@ -217,6 +236,96 @@ async function findBestMatch(query, requestedBy, targetDuration = 0) {
   return results[0];
 }
 
+async function getRelatedTracks(track, limit = 10) {
+  let videoId = extractVideoId(track?.url);
+  if (!videoId && track?.title) {
+    const searchTarget = track.author && track.author !== 'YouTube' && track.author !== 'SoundCloud'
+      ? `${track.author} ${track.title}`
+      : track.title;
+    const found = await search(searchTarget, track.requestedBy, 1);
+    if (found && found[0]) {
+      videoId = extractVideoId(found[0].url);
+    }
+  }
+
+  if (!videoId) return [];
+
+  try {
+    const url = 'https://www.youtube.com/youtubei/v1/next';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00',
+            hl: 'ru',
+            gl: 'US',
+          },
+        },
+        videoId,
+      }),
+      signal: AbortSignal.timeout(6000),
+    });
+
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const candidates = [];
+
+    const sec = json.contents?.twoColumnWatchNextResults?.secondaryResults?.secondaryResults?.results || [];
+    for (const it of sec) {
+      const vm = it.lockupViewModel;
+      if (vm?.contentId) {
+        if (vm.contentId.startsWith('RD')) continue;
+        const title = vm.metadata?.lockupMetadataViewModel?.title?.content || '';
+        const author =
+          vm.metadata?.lockupMetadataViewModel?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]
+            ?.text?.content || 'YouTube';
+        if (isLikelyMusic(title, author, 0, vm.contentId)) {
+          candidates.push({ videoId: vm.contentId, title, author });
+        }
+      }
+    }
+
+    const uniqueCandidates = [];
+    const seen = new Set([videoId]);
+    for (const c of candidates) {
+      if (!seen.has(c.videoId)) {
+        seen.add(c.videoId);
+        uniqueCandidates.push(c);
+      }
+    }
+
+    const tracks = [];
+    for (const c of uniqueCandidates) {
+      tracks.push(
+        createTrack({
+          source: 'youtube',
+          title: c.title || 'Похожий трек',
+          author: c.author || 'YouTube',
+          url: `https://www.youtube.com/watch?v=${c.videoId}`,
+          duration: 0,
+          thumbnail: `https://i.ytimg.com/vi/${c.videoId}/hqdefault.jpg`,
+          requestedBy: track.requestedBy,
+          streamProvider: fetchStream,
+        }),
+      );
+      if (tracks.length >= limit) break;
+    }
+
+    return tracks;
+  } catch (error) {
+    logger.debug(`getRelatedTracks ошибка: ${error.message}`);
+    return [];
+  }
+}
+
 module.exports = {
   isUrl,
   isPlaylistUrl,
@@ -225,4 +334,7 @@ module.exports = {
   search,
   findBestMatch,
   fetchStream,
+  extractVideoId,
+  getRelatedTracks,
+  isLikelyMusic,
 };

@@ -172,7 +172,9 @@ function queueList(queue, page = 1) {
 }
 
 function searchResults(tracks) {
-  const lines = tracks.map((track, index) => `**${index + 1}.** ${trackLink(track, 55)} — ${formatDuration(track.duration)}`);
+  const lines = tracks.map(
+    (track, index) => `**${index + 1}.** ${trackLink(track, 50)} (${sourceLabel(track)}) — ${formatDuration(track.duration)}`,
+  );
   return base(COLORS.primary).setAuthor({ name: 'Результаты поиска' }).setDescription(lines.join('\n'));
 }
 

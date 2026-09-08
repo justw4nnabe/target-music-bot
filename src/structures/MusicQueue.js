@@ -31,6 +31,21 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function extractArtist(track) {
+  const title = track?.title || '';
+  if (title.includes(' - ')) {
+    const fromTitle = title.split(' - ')[0].trim().replace(/^\[.*?\]\s*|\(.*?\)/g, '').trim();
+    if (fromTitle && fromTitle.length < 35 && !/^(?:official|music|video|audio|remix|ft|feat)/i.test(fromTitle)) {
+      return fromTitle;
+    }
+  }
+  const author = track?.author || '';
+  if (author && author !== 'YouTube' && author !== 'SoundCloud' && !/vevo|topic|records|music|lemonade/i.test(author)) {
+    return author;
+  }
+  return author || '';
+}
+
 class MusicQueue {
   constructor({ client, guild, textChannel, manager }) {
     this.client = client;
@@ -43,6 +58,7 @@ class MusicQueue {
     this.current = null;
     this.lastPlayedTrack = null;
     this.playedHistory = [];
+    this.recentAuthors = [];
     this.autoplay = false;
     this.skipVotes = new Set();
     this.volume = config.player.defaultVolume;
@@ -282,6 +298,13 @@ class MusicQueue {
           this.playedHistory.push(track.url);
           if (this.playedHistory.length > 50) this.playedHistory.shift();
         }
+        const artist = extractArtist(track);
+        if (artist) {
+          const authorKey = artist.toLowerCase().trim();
+          this.recentAuthors = this.recentAuthors.filter((a) => a !== authorKey);
+          this.recentAuthors.push(authorKey);
+          if (this.recentAuthors.length > 10) this.recentAuthors.shift();
+        }
         this.skipVotes.clear();
         this.clearIdleTimer();
         return true;
@@ -455,27 +478,87 @@ class MusicQueue {
       if (!base) return null;
 
       logger.info(`[${this.guildId}] Автовоспроизведение: ищу трек, похожий на «${base.title}»`);
-      const query = base.author && base.author !== 'YouTube'
-        ? `${base.author} music`
-        : `${base.title} audio`;
 
-      const results = await youtube.search(
-        query,
-        {
-          id: this.client.user.id,
-          displayName: 'Автовоспроизведение',
-          tag: 'Autoplay',
-        },
-        7,
-      );
+      const requestedBy = {
+        id: this.client.user.id,
+        displayName: 'Автовоспроизведение',
+        tag: 'Autoplay',
+      };
 
-      const candidate = results.find((item) => item.url && !this.playedHistory.includes(item.url));
-      const chosen = candidate || results[0] || null;
-      if (chosen) {
-        chosen.isAutoplay = true;
-        await this.send(embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(chosen.title, 70)}**](${chosen.url})`));
+      // 1. Fetch related tracks using YouTube Watch Next algorithm (pre-filtered by isLikelyMusic)
+      let candidates = await youtube.getRelatedTracks(base, 15);
+
+      // Fallback to search if recommendations returned nothing
+      if (!candidates || !candidates.length) {
+        const query =
+          base.author && base.author !== 'YouTube' && base.author !== 'SoundCloud'
+            ? `${base.author} music audio`
+            : `${base.title} music`;
+        candidates = await youtube.search(query, requestedBy, 10);
       }
-      return chosen;
+
+      if (!candidates || !candidates.length) return null;
+
+      // Filter out tracks already played in this session
+      const unplayed = candidates.filter((item) => {
+        if (!item.url) return false;
+        if (this.playedHistory.includes(item.url)) return false;
+        if (base.url && item.url === base.url) return false;
+        return true;
+      });
+
+      const pool = unplayed.length ? unplayed : candidates;
+
+      // Score candidates to guarantee artist diversity and fresh genres
+      const baseArtistNorm = extractArtist(base).toLowerCase().trim();
+
+      const scored = pool.map((cand) => {
+        const candArtist = extractArtist(cand);
+        const authorNorm = candArtist.toLowerCase().trim();
+        let score = 0;
+
+        if (authorNorm && authorNorm !== 'youtube' && authorNorm !== 'soundcloud') {
+          const recentIndex = this.recentAuthors.indexOf(authorNorm);
+          if (recentIndex === -1) {
+            score += 15; // Brand new artist
+          } else {
+            // Give higher score if played longer ago
+            score += (this.recentAuthors.length - recentIndex - 1);
+          }
+
+          if (authorNorm !== baseArtistNorm) {
+            score += 5; // Different artist from current track
+          }
+        }
+
+        return { cand, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const chosenCandidate = scored[0].cand;
+
+      // Check if chosen track can be played via SoundCloud (preferred audio source)
+      const soundcloud = require('../services/sources/soundcloud');
+      let finalTrack = chosenCandidate;
+
+      try {
+        const scQuery =
+          chosenCandidate.author && chosenCandidate.author !== 'YouTube' && chosenCandidate.author !== 'SoundCloud'
+            ? `${chosenCandidate.author} ${chosenCandidate.title}`
+            : chosenCandidate.title;
+        const scResults = await soundcloud.search(scQuery, requestedBy, 3);
+        const scTrack = scResults.find((t) => t.duration >= 60 && !this.playedHistory.includes(t.url));
+        if (scTrack) {
+          logger.info(`[${this.guildId}] Автовоспроизведение: найдена SoundCloud-версия «${scTrack.title}»`);
+          finalTrack = scTrack;
+        }
+      } catch (scErr) {
+        logger.debug(`[${this.guildId}] Автовоспроизведение SoundCloud search: ${scErr.message}`);
+      }
+
+      finalTrack.isAutoplay = true;
+      await this.send(embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(finalTrack.title, 70)}**](${finalTrack.url})`));
+      return finalTrack;
     } catch (error) {
       logger.warn(`[${this.guildId}] Ошибка автовоспроизведения: ${error.message}`);
       return null;

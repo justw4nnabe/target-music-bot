@@ -10,14 +10,14 @@ const { tracksWord } = require('../utils/format');
 module.exports = {
   name: 'play',
   aliases: ['p', 'играть', 'и'],
-  description: 'Включить трек или плейлист (YouTube, Spotify, SoundCloud или текстовый поиск)',
-  usage: '<ссылка или название>',
+  description: 'Включить трек или плейлист (SoundCloud, YouTube, Spotify или поиск: sc <запрос> / yt <запрос>)',
+  usage: '[sc|yt] <название или ссылка>',
   requiresVoice: true,
   requiresSameChannel: true,
 
   async execute({ message, query, queues, voiceChannel, prefix }) {
     if (!query) {
-      throw new UserError(`Укажи, что включить. Например: **${prefix}play группа крови** или ссылку на трек.`);
+      throw new UserError(`Укажи, что включить. Например: **${prefix}play группа крови**, **${prefix}play sc yeat** или ссылку на трек.`);
     }
 
     const queue = queues.ensure({ guild: message.guild, textChannel: message.channel });
