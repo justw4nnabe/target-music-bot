@@ -134,6 +134,7 @@ class MusicQueue {
       adapterCreator: voiceChannel.guild.voiceAdapterCreator,
       selfDeaf: true,
       selfMute: false,
+      debug: true,
     });
 
     this.voiceChannelId = voiceChannel.id;
@@ -167,6 +168,10 @@ class MusicQueue {
 
     connection.on('error', (error) => {
       logger.warn(`[${this.guildId}] Ошибка голосового соединения: ${error.message}`);
+    });
+
+    connection.on('debug', (message) => {
+      logger.info(`[${this.guildId}] [Voice Debug] ${message}`);
     });
 
     connection.on(VoiceConnectionStatus.Disconnected, async (_old, newState) => {
