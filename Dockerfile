@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     python3 \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Установка актуального официального бинарника yt-dlp
@@ -16,7 +17,7 @@ WORKDIR /app
 
 # Копируем package.json и устанавливаем зависимости
 COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm install --omit=dev
 
 # Копируем исходный код
 COPY . .

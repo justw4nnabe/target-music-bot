@@ -110,8 +110,16 @@ class MusicQueue {
   async connect(voiceChannel) {
     const existing = getVoiceConnection(this.guildId);
 
-    if (existing && this.connection === existing && this.voiceChannelId === voiceChannel.id) {
-      if (existing.state.status === VoiceConnectionStatus.Ready) return;
+    if (existing) {
+      if (existing.joinConfig?.channelId === voiceChannel.id && existing.state.status === VoiceConnectionStatus.Ready) {
+        this.connection = existing;
+        this.voiceChannelId = voiceChannel.id;
+        this.subscription = this.connection.subscribe(this.player);
+        return;
+      }
+      try {
+        existing.destroy();
+      } catch {}
     }
 
     this.connection = joinVoiceChannel({
@@ -128,12 +136,13 @@ class MusicQueue {
     try {
       await entersState(this.connection, VoiceConnectionStatus.Ready, config.player.connectionTimeoutMs);
     } catch (error) {
-      logger.warn(`[${this.guildId}] Подключение к голосовому каналу не удалось: ${error.message}`);
+      const currentStatus = this.connection?.state?.status ?? 'unknown';
+      logger.warn(`[${this.guildId}] Подключение к голосовому каналу не удалось (статус: ${currentStatus}): ${error.message}`);
       try {
         this.connection.destroy();
       } catch {}
       this.connection = null;
-      throw new UserError('Не удалось подключиться к голосовому каналу. Проверь права бота на подключение и разговор.');
+      throw new UserError('Не удалось подключиться к голосовому каналу (таймаут ответа Discord). Проверь права роли бота (Администратор) и попробуй сменить регион голосового канала на Роттердам/Франкфурт.');
     }
 
     this.subscription = this.connection.subscribe(this.player);
@@ -141,6 +150,10 @@ class MusicQueue {
   }
 
   attachConnectionHandlers(connection) {
+    connection.on('stateChange', (oldState, newState) => {
+      logger.info(`[${this.guildId}] Состояние голосового соединения: ${oldState.status} -> ${newState.status}`);
+    });
+
     connection.on('error', (error) => {
       logger.warn(`[${this.guildId}] Ошибка голосового соединения: ${error.message}`);
     });
