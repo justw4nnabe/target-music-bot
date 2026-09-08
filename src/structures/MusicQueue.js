@@ -302,19 +302,55 @@ class MusicQueue {
   }
 
   async playResource(track, seekSeconds) {
-    const { url, headers } = await resolver.getStream(track);
+    let streamInfo = await resolver.getStream(track);
 
     this.idleAction = 'ignore';
     this.releaseStream();
 
-    const handle = ffmpeg.createPcmStream({ url, headers, seek: seekSeconds });
-
+    let handle;
     try {
+      handle = await ffmpeg.createPcmStream({
+        url: streamInfo.url,
+        headers: streamInfo.headers,
+        seek: seekSeconds,
+        isYouTube: track.source === 'youtube' || Boolean(streamInfo.isYouTube),
+        targetUrl: streamInfo.targetUrl || track.playbackUrl || track.url,
+      });
+
       await handle.waitForStart(config.player.streamStartTimeoutMs);
     } catch (error) {
-      handle.kill();
-      this.idleAction = 'advance';
-      throw error;
+      if (handle) handle.kill();
+
+      if (track.source === 'youtube' && !track.fallbackAttempted) {
+        track.fallbackAttempted = true;
+        logger.warn(`[${this.guildId}] Ошибка воспроизведения YouTube для «${track.title}», пробую SoundCloud…`);
+        try {
+          const soundcloud = require('../services/sources/soundcloud');
+          const scQuery = `${track.title} ${track.author && track.author !== 'YouTube' ? track.author : ''}`.trim();
+          const scResults = await soundcloud.search(scQuery, track.requestedBy, 1);
+          if (scResults && scResults[0]) {
+            logger.info(`[${this.guildId}] Найдена копия на SoundCloud, переключаю поток…`);
+            const scStream = await soundcloud.fetchStream(scResults[0]);
+            handle = await ffmpeg.createPcmStream({
+              url: scStream.url,
+              headers: scStream.headers,
+              seek: seekSeconds,
+              isYouTube: false,
+            });
+            await handle.waitForStart(config.player.streamStartTimeoutMs);
+          } else {
+            this.idleAction = 'advance';
+            throw error;
+          }
+        } catch (scErr) {
+          if (handle) handle.kill();
+          this.idleAction = 'advance';
+          throw error;
+        }
+      } else {
+        this.idleAction = 'advance';
+        throw error;
+      }
     }
 
     const resource = createAudioResource(handle.stream, {

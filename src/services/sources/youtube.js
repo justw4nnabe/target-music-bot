@@ -59,40 +59,15 @@ function pickStream(info) {
 }
 
 async function fetchStream(track) {
-  const cached = track.cachedStream;
-  if (cached && Date.now() - cached.at < STREAM_TTL_MS) return { url: cached.url, headers: cached.headers };
-
   const target = track.playbackUrl ?? track.url;
   if (!target) throw new UserError('У трека нет ссылки на источник.');
 
-  try {
-    const info = await ytdlp.runJson(['--no-playlist', '--skip-download', '-f', FORMAT, target]);
-    const stream = pickStream(info);
-    if (!stream) throw new UserError('У этого видео нет доступной аудиодорожки.');
-
-    track.cachedStream = { ...stream, at: Date.now() };
-    return stream;
-  } catch (error) {
-    if (/sign in to confirm|not a bot|bot/i.test(error.message || error.stderr || '')) {
-      logger.warn(`YouTube запросил подтверждение бота для «${track.title}», пробую SoundCloud…`);
-      try {
-        const soundcloud = require('./soundcloud');
-        const scQuery = `${track.title} ${track.author && track.author !== 'YouTube' ? track.author : ''}`.trim();
-        const scResults = await soundcloud.search(scQuery, track.requestedBy, 1);
-        if (scResults && scResults[0]) {
-          const scStream = await soundcloud.fetchStream(scResults[0]);
-          if (scStream) {
-            logger.info(`Найдена копия трека «${track.title}» на SoundCloud, включаю её`);
-            track.cachedStream = { ...scStream, at: Date.now() };
-            return scStream;
-          }
-        }
-      } catch (fallbackErr) {
-        logger.debug(`SoundCloud fallback не удался: ${fallbackErr.message}`);
-      }
-    }
-    throw error;
-  }
+  return {
+    url: target,
+    targetUrl: target,
+    isYouTube: true,
+    headers: {},
+  };
 }
 
 function normalize(entry, requestedBy) {
@@ -113,21 +88,13 @@ function normalize(entry, requestedBy) {
 
 async function getTrack(url, requestedBy) {
   try {
-    const info = await ytdlp.runJson(['--no-playlist', '--skip-download', '-f', FORMAT, url]);
+    const info = await ytdlp.runJson(['--no-playlist', '--skip-download', '--flat-playlist', url]);
     const track = normalize(info, requestedBy);
     if (!track) throw new UserError('Не удалось разобрать это видео.');
-
-    const stream = pickStream(info);
-    if (stream) track.cachedStream = { ...stream, at: Date.now() };
-
     return track;
   } catch (error) {
     if (/sign in to confirm|not a bot|bot/i.test(error.message || error.stderr || '')) {
-      try {
-        const flat = await ytdlp.runJson(['--no-playlist', '--skip-download', '--flat-playlist', url]);
-        const track = normalize(flat, requestedBy);
-        if (track) return track;
-      } catch {}
+      throw new UserError('YouTube требует подтверждения для этого видео. Попробуй поиск по названию трека или SoundCloud.');
     }
     throw error;
   }

@@ -182,4 +182,4 @@ async function available() {
   }
 }
 
-module.exports = { runJson, getBinary, available, execute };
+module.exports = { runJson, getBinary, available, execute, buildArgs };
