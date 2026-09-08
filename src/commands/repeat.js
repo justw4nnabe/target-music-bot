@@ -34,16 +34,11 @@ const LABELS = {
 module.exports = {
   name: 'repeat',
   aliases: [
-    'loop',
     'repeatcurrent',
     'repeatqueue',
     'repeatdisable',
     'repeatoff',
-    'loopcurrent',
-    'loopqueue',
-    'loopoff',
     'повтор',
-    'луп',
   ],
   description: 'Режим повтора: current (текущий трек), queue (вся очередь), disable/off (выключить)',
   usage: '[current|queue|disable]',

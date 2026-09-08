@@ -14,10 +14,10 @@ const COLORS = {
 };
 
 const SOURCES = {
-  youtube: '🔴 YouTube',
-  spotify: '🟢 Spotify',
-  soundcloud: '🟠 SoundCloud',
-  link: '🔗 Ссылка',
+  youtube: 'YouTube',
+  spotify: 'Spotify',
+  soundcloud: 'SoundCloud',
+  link: 'Ссылка',
 };
 
 const LOOP_LABELS = {
@@ -27,7 +27,7 @@ const LOOP_LABELS = {
 };
 
 function sourceLabel(track) {
-  return SOURCES[track?.source] ?? '🔗 Ссылка';
+  return SOURCES[track?.source] ?? (track?.source || 'Ссылка');
 }
 
 function trackLink(track, max = 60) {
@@ -64,7 +64,7 @@ function trackStarted(track) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
+    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
       { name: 'Источник', value: sourceLabel(track), inline: true },
@@ -89,7 +89,7 @@ function nowPlaying(queue) {
   const embed = base(COLORS.primary)
     .setAuthor({ name: queue.paused ? 'На паузе' : 'Сейчас играет' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}\n\n${timeline}`)
+    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}\n\n${timeline}`)
     .addFields(
       { name: 'Громкость', value: `${queue.volume}%`, inline: true },
       { name: 'Повтор', value: LOOP_LABELS[queue.loopMode], inline: true },
@@ -106,7 +106,7 @@ function addedTrack(track, position) {
   const embed = base(COLORS.success)
     .setAuthor({ name: position > 0 ? 'Добавлено в очередь' : 'Выбран трек' })
     .setTitle(truncate(track.title, 100))
-    .setDescription(`🎵 ${trackLink(track, 100)}\n👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
+    .setDescription(`👤 **Исполнитель:** ${escapeMarkdown(truncate(track.author, 80))}`)
     .addFields(
       { name: 'Длительность', value: formatDuration(track.duration), inline: true },
       { name: 'Позиция', value: position > 0 ? `#${position}` : '▶️ играет сейчас', inline: true },
@@ -146,22 +146,24 @@ function queueList(queue, page = 1) {
 
   const embed = base(COLORS.primary).setAuthor({ name: 'Очередь воспроизведения' });
 
+  const sections = [];
+
   if (queue.current) {
-    embed.addFields({
-      name: queue.paused ? 'На паузе' : 'Играет сейчас',
-      value: `${trackLink(queue.current, 60)} \`${formatDuration(queue.current.duration)}\``,
-    });
+    const status = queue.paused ? '⏸️ **Сейчас на паузе:**' : '▶️ **Сейчас играет:**';
+    sections.push(`${status}\n${trackLink(queue.current, 65)} \`${formatDuration(queue.current.duration)}\``);
   }
 
   if (!slice.length) {
-    embed.setDescription('Дальше ничего нет — добавь треки командой `' + config.prefix + 'play`.');
+    sections.push('**Очередь:**\n*Дальше ничего нет — добавь треки командой `' + config.prefix + 'play`.*');
   } else {
     const lines = slice.map((track, index) => {
       const number = start + index + 1;
       return `\`${String(number).padStart(2, ' ')}.\` ${trackLink(track, 52)} \`${formatDuration(track.duration)}\``;
     });
-    embed.setDescription(lines.join('\n'));
+    sections.push(`**Очередь:**\n${lines.join('\n')}`);
   }
+
+  embed.setDescription(sections.join('\n\n'));
 
   const totalDuration = queue.tracks.reduce((sum, track) => sum + track.duration, 0);
   embed.setFooter({
@@ -206,12 +208,15 @@ function commandHelp(command, prefix) {
   return embed;
 }
 
-function lyricsEmbed(title, artist, lyrics) {
-  return base(COLORS.primary)
+function lyricsEmbed(title, artist, lyrics, url = null) {
+  const embed = base(COLORS.primary)
     .setTitle(`Текст песни: ${truncate(title, 80)}`)
     .setAuthor({ name: truncate(artist, 80) })
     .setDescription(lyrics)
-    .setFooter({ text: 'Источник: lrclib.net' });
+    .setFooter({ text: 'Источник: genius.com' });
+
+  if (url) embed.setURL(url);
+  return embed;
 }
 
 module.exports = {
