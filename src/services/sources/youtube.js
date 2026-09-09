@@ -128,7 +128,7 @@ async function getPlaylist(url, requestedBy) {
 const { parseDuration } = require('../../utils/format');
 
 const NON_MUSIC_REGEX =
-  /(?:react|реакци|почему|что случилось|разбор|обзор|review|interview|интервью|podcast|подкаст|сколько бы|gameplay|геймплей|vlog|влог|shorts|разоблачени|stream|стрим|compilation|компиляц|mix\s*#|workout|hours?|минут|transition|конфликт|драка|истори|новости|news|тир-лист|tier\s*list|выбор|соловьев|политик|реч|шок|взрыв|скандал|playlist|chillout|vol\s*\d+|триллер|боевик|комедия|фильм|кино|сериал|movie|film|trailer|трейлер|beef|биф|джем|jam\s*–)/i;
+  /(?:react|реакци|почему|что случилось|разбор|обзор|review|interview|интервью|podcast|подкаст|сколько бы|gameplay|геймплей|vlog|влог|shorts|разоблачени|stream|стрим|compilation|компиляц|mix\s*#|workout|hours?|минут|transition|конфликт|драка|истори|новости|news|тир-лист|tier\s*list|выбор|соловьев|политик|реч|шок|взрыв|скандал|playlist|chillout|vol\s*\d+|триллер|боевик|комедия|фильм|кино|сериал|movie|film|trailer|трейлер|beef|биф|джем|jam\s*–|type\s*beat|typebeat|free\s*beat|prodby|prod\s*by|instrumental\s*beat|ужас|страшн|крипипаст|creepypasta|интернет|pov:|товары|купил|распаковк|сгорел|погиб|трагеди|архив|уровн|легион|декор|ambience|decor|festive|asmr|асфр|факты|секреты|биография|documentary|документал)/i;
 
 function extractVideoId(input) {
   if (!input) return null;
@@ -140,6 +140,7 @@ function isLikelyMusic(title, author = '', duration = 0, videoId = '') {
   if (!title) return false;
   if (videoId && /^RD/i.test(videoId)) return false;
   if (NON_MUSIC_REGEX.test(title) || NON_MUSIC_REGEX.test(author)) return false;
+  if (/(?:beats|prodby|type\s*beat)/i.test(author)) return false;
   if (duration > 0 && (duration < 55 || duration > 600)) return false;
   return true;
 }

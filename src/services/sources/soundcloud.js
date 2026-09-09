@@ -51,6 +51,29 @@ async function fetchStream(track) {
     const stream = pickStream(info);
     if (!stream) throw new UserError('У этого трека SoundCloud нет доступного аудиопотока.');
 
+    // Always update track metadata with real fetched info
+    if (info.title) {
+      let fullTitle = info.title;
+      const author = info.uploader ?? info.channel ?? track.author;
+      if (author && author !== 'SoundCloud' && !fullTitle.toLowerCase().includes(author.toLowerCase())) {
+        fullTitle = `${author} - ${fullTitle}`;
+      }
+      track.title = fullTitle;
+    }
+    if (info.uploader && info.uploader !== 'SoundCloud') {
+      track.author = info.uploader;
+    }
+    if (info.duration) {
+      track.duration = Math.round(Number(info.duration)) || 0;
+    }
+    if (info.webpage_url && (!track.url || track.url.includes('api-v2.soundcloud.com'))) {
+      track.url = info.webpage_url;
+    }
+    if (info.thumbnail && !track.thumbnail) {
+      track.thumbnail = thumbnailFor(info);
+    }
+    track.resolved = true;
+
     track.cachedStream = { ...stream, at: Date.now() };
     return stream;
   } catch (error) {
@@ -75,12 +98,25 @@ async function fetchStream(track) {
   }
 }
 
-function normalize(entry, requestedBy) {
+function normalize(entry, requestedBy, index = 0) {
   const url = entry.webpage_url ?? (typeof entry.url === 'string' && /^https?:/i.test(entry.url) ? entry.url : null);
   if (!url) return null;
 
-  let title = entry.title ?? 'Без названия';
-  const author = entry.uploader ?? entry.channel ?? 'SoundCloud';
+  let title = entry.title;
+  let author = entry.uploader ?? entry.channel ?? entry.album_artist ?? entry.artist ?? 'SoundCloud';
+
+  if (!title) {
+    const slugMatch = url.match(/soundcloud\.com\/[^/]+\/([^/?#]+)/);
+    if (slugMatch && !/^tracks$/i.test(slugMatch[1])) {
+      const slug = slugMatch[1].replace(/-\d+$/, '').replace(/-/g, ' ');
+      title = slug.charAt(0).toUpperCase() + slug.slice(1);
+    } else if (entry.album) {
+      title = `Трек ${index + 1} (${entry.album})`;
+    } else {
+      title = `Трек #${index + 1}`;
+    }
+  }
+
   if (author && author !== 'SoundCloud' && !title.toLowerCase().includes(author.toLowerCase())) {
     title = `${author} - ${title}`;
   }
@@ -117,7 +153,8 @@ async function getPlaylist(url, requestedBy) {
     url,
   ]);
 
-  const tracks = (info.entries ?? []).filter(Boolean).map((entry) => normalize(entry, requestedBy)).filter(Boolean);
+  const rawEntries = (info.entries ?? []).filter(Boolean);
+  const tracks = rawEntries.map((entry, idx) => normalize(entry, requestedBy, idx)).filter(Boolean);
   if (!tracks.length) throw new UserError('В этом сете SoundCloud нет доступных треков.');
 
   return {
@@ -152,4 +189,29 @@ async function findBestMatch(query, requestedBy, targetDuration = 0) {
   return results[0];
 }
 
-module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream };
+async function resolveTrack(track) {
+  if (track.resolved && !track.url?.includes('api-v2.soundcloud.com') && track.duration > 0) return track;
+  const target = track.playbackUrl ?? track.url;
+  if (!target) return track;
+
+  try {
+    const info = await ytdlp.runJson(['--no-playlist', '--skip-download', target]);
+    if (info.title) {
+      let fullTitle = info.title;
+      const author = info.uploader ?? info.channel ?? track.author;
+      if (author && author !== 'SoundCloud' && !fullTitle.toLowerCase().includes(author.toLowerCase())) {
+        fullTitle = `${author} - ${fullTitle}`;
+      }
+      track.title = fullTitle;
+    }
+    if (info.uploader && info.uploader !== 'SoundCloud') track.author = info.uploader;
+    if (info.duration) track.duration = Math.round(Number(info.duration)) || 0;
+    if (info.webpage_url) track.url = info.webpage_url;
+    if (info.thumbnail && !track.thumbnail) track.thumbnail = thumbnailFor(info);
+    track.resolved = true;
+  } catch {}
+
+  return track;
+}
+
+module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream, resolveTrack };
