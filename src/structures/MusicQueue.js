@@ -88,6 +88,7 @@ class MusicQueue {
     this.destroyed = false;
     this.advancing = false;
     this.idleAction = 'advance';
+    this.manualSkip = false;
     this.idleTimer = null;
     this.emptyChannelTimer = null;
     this.nowPlayingMessage = null;
@@ -95,7 +96,7 @@ class MusicQueue {
     this.player = createAudioPlayer({
       behaviors: {
         noSubscriber: NoSubscriberBehavior.Play,
-        maxMissedFrames: 50,
+        maxMissedFrames: 250,
       },
     });
 
@@ -470,6 +471,48 @@ class MusicQueue {
       return;
     }
 
+    if (this.manualSkip) {
+      this.manualSkip = false;
+      logger.debug(`[${this.guildId}] Ручной пропуск трека`);
+      this.releaseStream();
+      this.advance().catch((error) => logger.error(`[${this.guildId}] advance:`, error));
+      return;
+    }
+
+    // Check if the track dropped prematurely mid-playback
+    const current = this.current;
+    if (current) {
+      const duration = Number(current.duration) || 0;
+      const position = this.getPosition();
+      const isPremature =
+        (duration > 15 && position < Math.max(0, duration - 8)) ||
+        (duration === 0 && position < 10);
+
+      if (isPremature) {
+        current._streamDropRetries = (current._streamDropRetries || 0) + 1;
+        if (current._streamDropRetries <= 2) {
+          logger.warn(
+            `[${this.guildId}] Воспроизведение «${current.title}» неожиданно оборвалось на ${position}с из ${duration}с. Восстанавливаю поток (попытка ${current._streamDropRetries})…`,
+          );
+          this.releaseStream();
+          current.cachedStream = null;
+          const resumeSeek = Math.max(0, position - 1);
+          this.tryStart(current, resumeSeek)
+            .then((resumed) => {
+              if (!resumed) {
+                logger.warn(`[${this.guildId}] Не удалось восстановить поток «${current.title}», перехожу дальше`);
+                this.advance().catch((err) => logger.error(`[${this.guildId}] advance:`, err));
+              }
+            })
+            .catch((err) => {
+              logger.error(`[${this.guildId}] Ошибка восстановления потока:`, err);
+              this.advance().catch((e) => logger.error(`[${this.guildId}] advance:`, e));
+            });
+          return;
+        }
+      }
+    }
+
     logger.debug(`[${this.guildId}] Трек закончился, беру следующий`);
     this.releaseStream();
     this.advance().catch((error) => logger.error(`[${this.guildId}] advance:`, error));
@@ -482,6 +525,12 @@ class MusicQueue {
 
     if (this.idleAction === 'ignore') {
       logger.debug(`[${this.guildId}] Ошибка плеера проигнорирована (управляемая смена трека/перемотка)`);
+      return;
+    }
+
+    // If stream drop recovery is available, let handleIdle attempt recovery before alerting the user
+    const current = this.current;
+    if (current && (!current._streamDropRetries || current._streamDropRetries < 2)) {
       return;
     }
 
@@ -722,6 +771,7 @@ class MusicQueue {
     this.skipVotes.clear();
     const skipped = this.current;
     if (this.loopMode === 'track') this.loopMode = 'off';
+    this.manualSkip = true;
     this.idleAction = 'advance';
     this.player.stop(true);
     return skipped;

@@ -7,7 +7,7 @@ const { UserError } = require('../../utils/errors');
 
 const URL_PATTERN = /^(?:https?:\/\/)?(?:www\.|m\.)?soundcloud\.com\//i;
 const STREAM_TTL_MS = 20 * 60 * 1000;
-const FORMAT = 'bestaudio/best';
+const FORMAT = 'bestaudio[protocol^=http]/bestaudio/best';
 
 function isUrl(input) {
   return URL_PATTERN.test(String(input).trim());
@@ -26,16 +26,28 @@ function thumbnailFor(entry) {
 }
 
 function pickStream(info) {
+  const audioFormats = (info.formats ?? []).filter((format) => format?.url && format.acodec !== 'none');
+
+  if (audioFormats.length) {
+    const httpAudio = audioFormats
+      .filter((f) => f.protocol === 'http' || f.protocol === 'https')
+      .sort((a, b) => (b.abr ?? 0) - (a.abr ?? 0))[0];
+
+    if (httpAudio) {
+      return { url: httpAudio.url, headers: httpAudio.http_headers ?? info.http_headers ?? {} };
+    }
+
+    const anyAudio = audioFormats.sort((a, b) => (b.abr ?? 0) - (a.abr ?? 0))[0];
+    if (anyAudio) {
+      return { url: anyAudio.url, headers: anyAudio.http_headers ?? info.http_headers ?? {} };
+    }
+  }
+
   if (info.url) return { url: info.url, headers: info.http_headers ?? {} };
 
   const requested = info.requested_formats?.[0];
   if (requested?.url) return { url: requested.url, headers: requested.http_headers ?? info.http_headers ?? {} };
 
-  const audio = (info.formats ?? [])
-    .filter((format) => format?.url && format.acodec !== 'none')
-    .sort((a, b) => (b.abr ?? 0) - (a.abr ?? 0))[0];
-
-  if (audio) return { url: audio.url, headers: audio.http_headers ?? info.http_headers ?? {} };
   return null;
 }
 
