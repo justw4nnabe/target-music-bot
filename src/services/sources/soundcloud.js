@@ -121,7 +121,7 @@ function normalize(entry, requestedBy, index = 0) {
     title = `${author} - ${title}`;
   }
 
-  return createTrack({
+  const track = createTrack({
     source: 'soundcloud',
     title,
     author,
@@ -131,6 +131,8 @@ function normalize(entry, requestedBy, index = 0) {
     requestedBy,
     streamProvider: fetchStream,
   });
+  if (entry.id) track.id = String(entry.id);
+  return track;
 }
 
 async function getTrack(url, requestedBy) {
@@ -208,10 +210,119 @@ async function resolveTrack(track) {
     if (info.duration) track.duration = Math.round(Number(info.duration)) || 0;
     if (info.webpage_url) track.url = info.webpage_url;
     if (info.thumbnail && !track.thumbnail) track.thumbnail = thumbnailFor(info);
+    if (info.id) track.id = String(info.id);
     track.resolved = true;
   } catch {}
 
   return track;
 }
 
-module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream, resolveTrack };
+let cachedClientId = null;
+let clientIdExpiresAt = 0;
+
+async function getClientId() {
+  if (cachedClientId && Date.now() < clientIdExpiresAt) {
+    return cachedClientId;
+  }
+  try {
+    const res = await fetch('https://soundcloud.com', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    const html = await res.text();
+    const match = html.match(/window\.__sc_hydration\s*=\s*(\[.*?\]);<\/script>/s);
+    if (match) {
+      const data = JSON.parse(match[1]);
+      const apiClient = data.find((i) => i.hydratable === 'apiClient');
+      if (apiClient?.data?.id) {
+        cachedClientId = apiClient.data.id;
+        clientIdExpiresAt = Date.now() + 2 * 60 * 60 * 1000;
+        return cachedClientId;
+      }
+    }
+  } catch (e) {
+    const logger = require('../../utils/logger');
+    logger.debug(`getClientId error: ${e.message}`);
+  }
+  return 'Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo';
+}
+
+async function getRelatedTracks(track, limit = 15) {
+  let trackId = track?.id;
+  if (!trackId && track?.url) {
+    const apiMatch = track.url.match(/tracks\/(\d+)/);
+    if (apiMatch) trackId = apiMatch[1];
+  }
+
+  const clientId = await getClientId();
+  if (!trackId && track?.url && clientId) {
+    try {
+      const pageRes = await fetch(track.url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36' },
+        signal: AbortSignal.timeout(4000),
+      });
+      const html = await pageRes.text();
+      const match = html.match(/window\.__sc_hydration\s*=\s*(\[.*?\]);<\/script>/s);
+      if (match) {
+        const data = JSON.parse(match[1]);
+        const sound = data.find((i) => i.hydratable === 'sound');
+        if (sound?.data?.id) {
+          trackId = String(sound.data.id);
+          track.id = trackId;
+        }
+      }
+    } catch {}
+  }
+
+  if (!trackId || !clientId) {
+    return [];
+  }
+
+  try {
+    const url = `https://api-v2.soundcloud.com/tracks/${trackId}/related?client_id=${clientId}&limit=${limit}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const collection = json.collection || [];
+    const tracks = [];
+
+    for (const item of collection) {
+      if (!item.permalink_url) continue;
+      const durationSec = Math.round((item.duration || 0) / 1000);
+      if (durationSec > 0 && durationSec < 50) continue;
+
+      let title = item.title || 'Без названия';
+      const author = item.user?.username || 'SoundCloud';
+      if (author && author !== 'SoundCloud' && !title.toLowerCase().includes(author.toLowerCase())) {
+        title = `${author} - ${title}`;
+      }
+
+      const t = createTrack({
+        source: 'soundcloud',
+        title,
+        author,
+        url: item.permalink_url,
+        duration: durationSec,
+        thumbnail: item.artwork_url || item.user?.avatar_url || null,
+        requestedBy: track?.requestedBy,
+        streamProvider: fetchStream,
+      });
+      if (item.id) t.id = String(item.id);
+      tracks.push(t);
+    }
+
+    return tracks;
+  } catch (err) {
+    const logger = require('../../utils/logger');
+    logger.debug(`soundcloud.getRelatedTracks error: ${err.message}`);
+    return [];
+  }
+}
+
+module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream, resolveTrack, getRelatedTracks };

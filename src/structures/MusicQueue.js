@@ -505,7 +505,45 @@ class MusicQueue {
 
       const soundcloud = require('../services/sources/soundcloud');
 
-      // If base track is unresolved, resolve its metadata first so we have the real title & artist
+      const requestedBy = {
+        id: this.client.user.id,
+        displayName: 'Автовоспроизведение',
+        tag: 'Autoplay',
+      };
+
+      // 1. If base track was from YouTube or another non-SoundCloud source, find its counterpart on SoundCloud
+      if (base.source !== 'soundcloud') {
+        const cleanArtist = extractArtist(base);
+        const cleanTitle = (base.title || '')
+          .replace(/\(.*?\)|\[.*?\]/g, '')
+          .replace(/official\s*(?:music\s*)?video/i, '')
+          .replace(/official\s*audio/i, '')
+          .replace(/video\s*clip/i, '')
+          .replace(/клип/i, '')
+          .trim();
+        const scQuery =
+          cleanArtist && !cleanTitle.toLowerCase().includes(cleanArtist.toLowerCase())
+            ? `${cleanArtist} ${cleanTitle}`
+            : cleanTitle || base.title;
+
+        logger.info(
+          `[${this.guildId}] Автоплей: трек был из источника «${base.source}», ищу оригинал на SoundCloud: «${scQuery}»`,
+        );
+
+        try {
+          const scMatches = await soundcloud.search(scQuery, requestedBy, 3);
+          if (scMatches && scMatches[0]) {
+            base = scMatches[0];
+          } else if (cleanArtist) {
+            const scArtistMatches = await soundcloud.search(cleanArtist, requestedBy, 3);
+            if (scArtistMatches && scArtistMatches[0]) base = scArtistMatches[0];
+          }
+        } catch (err) {
+          logger.debug(`[${this.guildId}] Не удалось найти SoundCloud-аналог для YouTube-трека: ${err.message}`);
+        }
+      }
+
+      // If base SoundCloud track is unresolved, resolve its metadata first
       if (
         base.source === 'soundcloud' &&
         (!base.title || base.title === 'Без названия' || base.url?.includes('api-v2.soundcloud.com') || !base.duration)
@@ -516,128 +554,101 @@ class MusicQueue {
       }
 
       const baseArtist = extractArtist(base);
-      logger.info(`[${this.guildId}] Автовоспроизведение: ищу трек, похожий на «${base.title}» (артист: ${baseArtist || 'неизвестен'})`);
+      logger.info(
+        `[${this.guildId}] Автовоспроизведение: подбираю трек на SoundCloud по стилю «${base.title}» (артист: ${baseArtist || 'неизвестен'})`,
+      );
 
-      const requestedBy = {
-        id: this.client.user.id,
-        displayName: 'Автовоспроизведение',
-        tag: 'Autoplay',
-      };
+      // 2. Primary Engine: SoundCloud native related tracks (strict genre/vibe consistency)
+      let candidates = [];
+      try {
+        candidates = await soundcloud.getRelatedTracks(base, 20);
+        logger.info(`[${this.guildId}] Автоплей: получено ${candidates.length} похожих треков из SoundCloud`);
+      } catch (err) {
+        logger.debug(`[${this.guildId}] Ошибка soundcloud.getRelatedTracks: ${err.message}`);
+      }
 
-      // 1. Priority Strategy: Smart Genre Recommendations via Last.fm + SoundCloud
-      if (baseArtist && baseArtist !== 'SoundCloud' && baseArtist !== 'YouTube') {
-        const similarArtists = await getSimilarArtists(baseArtist);
-        if (similarArtists.length) {
-          const freshArtists = similarArtists.filter(
-            (a) => !this.recentAuthors.includes(a.toLowerCase().trim()) && a.toLowerCase().trim() !== baseArtist.toLowerCase().trim(),
-          );
-
-          for (const artist of freshArtists) {
-            try {
-              const scTracks = await soundcloud.search(artist, requestedBy, 4);
-              const candidate = scTracks.find(
-                (t) => t.duration >= 60 && !this.playedHistory.includes(t.url) && (base.url ? t.url !== base.url : true),
-              );
-              if (candidate) {
-                logger.info(`[${this.guildId}] Автовоспроизведение: найден трек похожего артиста «${candidate.title}» (${artist})`);
-                candidate.isAutoplay = true;
-                await this.send(
-                  embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(candidate.title, 70)}**](${candidate.url})`),
-                );
-                return candidate;
-              }
-            } catch (err) {
-              logger.debug(`[${this.guildId}] Ошибка поиска похожего артиста ${artist}: ${err.message}`);
+      // 3. Fallback / Supplement: If few related tracks, search SoundCloud for artist or similar artists
+      if (!candidates || candidates.length < 3) {
+        if (baseArtist && baseArtist !== 'SoundCloud') {
+          // Try similar artists via Last.fm if available
+          try {
+            const similarArtists = await getSimilarArtists(baseArtist);
+            const freshArtists = similarArtists.filter(
+              (a) =>
+                !this.recentAuthors.includes(a.toLowerCase().trim()) &&
+                a.toLowerCase().trim() !== baseArtist.toLowerCase().trim(),
+            );
+            for (const simArtist of freshArtists.slice(0, 3)) {
+              const more = await soundcloud.search(simArtist, requestedBy, 4);
+              candidates.push(...more);
             }
-          }
+          } catch {}
+
+          // Also search SoundCloud for base artist's music
+          try {
+            const moreArtistTracks = await soundcloud.search(baseArtist, requestedBy, 6);
+            candidates.push(...moreArtistTracks);
+          } catch {}
         }
       }
 
-      // 2. Secondary Strategy: YouTube Watch Next algorithm (strictly filtered for music)
-      let candidates = await youtube.getRelatedTracks(base, 15);
-
-      // Fallback search if recommendations returned nothing
       if (!candidates || !candidates.length) {
-        const query =
-          baseArtist && baseArtist !== 'YouTube' && baseArtist !== 'SoundCloud'
-            ? `${baseArtist} audio`
-            : `${base.title} audio`;
-        candidates = await youtube.search(query, requestedBy, 10);
+        logger.warn(`[${this.guildId}] Автовоспроизведение: не удалось найти подходящие треки на SoundCloud`);
+        return null;
       }
 
-      if (candidates && candidates.length) {
-        const unplayed = candidates.filter((item) => {
-          if (!item.url) return false;
-          if (this.playedHistory.includes(item.url)) return false;
-          if (base.url && item.url === base.url) return false;
-          return true;
-        });
+      // 4. Filter candidates: only SoundCloud, unplayed, full songs
+      const unplayed = candidates.filter((item) => {
+        if (!item.url) return false;
+        if (item.source !== 'soundcloud') return false;
+        if (this.playedHistory.includes(item.url)) return false;
+        if (base.url && item.url === base.url) return false;
+        if (item.duration > 0 && item.duration < 50) return false; // Filter short preview snippets
+        return true;
+      });
 
-        const pool = unplayed.length ? unplayed : candidates;
-        const baseArtistNorm = (baseArtist || '').toLowerCase().trim();
+      const pool = unplayed.length ? unplayed : candidates.filter((item) => item.source === 'soundcloud');
+      if (!pool.length) return null;
 
-        const scored = pool.map((cand) => {
-          const candArtist = extractArtist(cand);
-          const authorNorm = candArtist.toLowerCase().trim();
-          let score = 0;
+      // 5. Score candidates for artist diversity and style retention
+      const baseArtistNorm = (baseArtist || '').toLowerCase().trim();
 
-          if (authorNorm && authorNorm !== 'youtube' && authorNorm !== 'soundcloud') {
-            const recentIndex = this.recentAuthors.indexOf(authorNorm);
-            if (recentIndex === -1) {
-              score += 15;
-            } else {
-              score += (this.recentAuthors.length - recentIndex - 1);
-            }
+      const scored = pool.map((cand) => {
+        const candArtist = extractArtist(cand);
+        const authorNorm = candArtist.toLowerCase().trim();
+        let score = 0;
 
-            if (authorNorm !== baseArtistNorm) {
-              score += 5;
-            }
+        if (authorNorm && authorNorm !== 'soundcloud' && authorNorm !== 'youtube') {
+          const recentIndex = this.recentAuthors.indexOf(authorNorm);
+          if (recentIndex === -1) {
+            score += 15; // Brand new artist in the same genre
+          } else {
+            // Higher score if played longer ago
+            score += this.recentAuthors.length - recentIndex - 1;
           }
 
-          return { cand, score };
-        });
-
-        scored.sort((a, b) => b.score - a.score);
-        const chosenCandidate = scored[0].cand;
-
-        // Check if candidate can be played via clean SoundCloud audio
-        let finalTrack = chosenCandidate;
-        try {
-          const scQuery =
-            chosenCandidate.author && chosenCandidate.author !== 'YouTube' && chosenCandidate.author !== 'SoundCloud'
-              ? `${chosenCandidate.author} ${chosenCandidate.title}`
-              : chosenCandidate.title;
-          const scResults = await soundcloud.search(scQuery, requestedBy, 3);
-          const scTrack = scResults.find((t) => t.duration >= 60 && !this.playedHistory.includes(t.url));
-          if (scTrack) {
-            logger.info(`[${this.guildId}] Автовоспроизведение: найдена SoundCloud-версия «${scTrack.title}»`);
-            finalTrack = scTrack;
+          if (authorNorm !== baseArtistNorm) {
+            score += 5; // Rotate away from current artist
           }
-        } catch {}
-
-        finalTrack.isAutoplay = true;
-        await this.send(
-          embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(finalTrack.title, 70)}**](${finalTrack.url})`),
-        );
-        return finalTrack;
-      }
-
-      // 3. Last Resort Fallback: Another track by the base artist from SoundCloud
-      if (baseArtist && baseArtist !== 'SoundCloud' && baseArtist !== 'YouTube') {
-        const fallbackResults = await soundcloud.search(baseArtist, requestedBy, 6);
-        const fallbackTrack = fallbackResults.find(
-          (t) => t.duration >= 60 && !this.playedHistory.includes(t.url) && (base.url ? t.url !== base.url : true),
-        );
-        if (fallbackTrack) {
-          fallbackTrack.isAutoplay = true;
-          await this.send(
-            embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(fallbackTrack.title, 70)}**](${fallbackTrack.url})`),
-          );
-          return fallbackTrack;
         }
-      }
 
-      return null;
+        if (cand.duration >= 60 && cand.duration <= 450) {
+          score += 3;
+        }
+
+        return { cand, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+      const chosen = scored[0].cand;
+
+      chosen.isAutoplay = true;
+      chosen.source = 'soundcloud';
+
+      await this.send(
+        embeds.info(`**Автовоспроизведение:** следующий трек [**${truncate(chosen.title, 70)}**](${chosen.url})`),
+      );
+      return chosen;
     } catch (error) {
       logger.warn(`[${this.guildId}] Ошибка автовоспроизведения: ${error.message}`);
       return null;
