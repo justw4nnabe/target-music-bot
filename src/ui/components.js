@@ -53,7 +53,7 @@ function playerRow(queue, disabled = false) {
       .setCustomId(IDS.autoplay)
       .setLabel(autoplayLabel)
       .setStyle(autoplayStyle)
-      .setDisabled(autoplayDisabled),
+      .setDisabled(disabled),
   );
 }
 
