@@ -286,11 +286,14 @@ function isQualityTrack(item, baseTitle = '') {
     }
   }
 
-  const durationSec = item.duration
-    ? Math.round(item.duration / 1000)
-    : item.full_duration
-      ? Math.round(item.full_duration / 1000)
-      : Number(item.durationSec) || 0;
+  let durationSec = 0;
+  if (item.duration) {
+    durationSec = item.duration > 10000 ? Math.round(item.duration / 1000) : Math.round(item.duration);
+  } else if (item.full_duration) {
+    durationSec = item.full_duration > 10000 ? Math.round(item.full_duration / 1000) : Math.round(item.full_duration);
+  } else if (item.durationSec) {
+    durationSec = Math.round(item.durationSec);
+  }
 
   if (durationSec > 0 && (durationSec < 65 || durationSec > 480)) {
     return false;

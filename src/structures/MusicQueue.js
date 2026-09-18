@@ -73,6 +73,7 @@ class MusicQueue {
     this.lastPlayedTrack = null;
     this.playedHistory = [];
     this.recentAuthors = [];
+    this.recentSongNames = [];
     this.sessionVibe = [];
     this.dislikedAuthors = new Set();
     this.autoplay = false;
@@ -241,6 +242,15 @@ class MusicQueue {
     });
   }
 
+  cleanSongName(title) {
+    return (title || '')
+      .toLowerCase()
+      .replace(/\(.*?\)|\[.*?\]/g, '')
+      .replace(/^.+?\s*[-—–]\s*/, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .trim();
+  }
+
   addToSessionVibe(track) {
     if (!track) return;
     const artist = extractArtist(track);
@@ -378,6 +388,12 @@ class MusicQueue {
           this.recentAuthors = this.recentAuthors.filter((a) => a !== authorKey);
           this.recentAuthors.push(authorKey);
           if (this.recentAuthors.length > 10) this.recentAuthors.shift();
+        }
+        const songName = this.cleanSongName(track.title);
+        if (songName) {
+          this.recentSongNames = this.recentSongNames.filter((s) => s !== songName);
+          this.recentSongNames.push(songName);
+          if (this.recentSongNames.length > 20) this.recentSongNames.shift();
         }
         this.skipVotes.clear();
         this.clearIdleTimer();
@@ -658,11 +674,38 @@ class MusicQueue {
       );
 
       // 2. Candidate Collection:
-      // Primary: SoundCloud native related tracks for the current base track
       let candidates = [];
+
+      // A. Spotify Collaborative Filtering Graph (if configured in .env)
+      const spotify = require('../services/sources/spotify');
+      if (spotify.isConfigured()) {
+        try {
+          const spotifyRecs = await spotify.getRecommendations(base.title, baseArtist, 15);
+          if (spotifyRecs && spotifyRecs.length > 0) {
+            logger.info(`[${this.guildId}] Автоплей: получено ${spotifyRecs.length} рекомендаций из графа Spotify`);
+            for (const rec of spotifyRecs.slice(0, 8)) {
+              const recArtist = rec.artist.toLowerCase().trim();
+              if (this.dislikedAuthors.has(recArtist)) continue;
+
+              const scMatches = await soundcloud.search(rec.fullQuery, requestedBy, 2);
+              const cleanMatch = scMatches.find(
+                (t) => t.duration >= 60 && !this.playedHistory.includes(t.url) && (base.url ? t.url !== base.url : true),
+              );
+              if (cleanMatch) {
+                candidates.push(cleanMatch);
+              }
+            }
+          }
+        } catch (spErr) {
+          logger.debug(`[${this.guildId}] Ошибка Spotify рекомендаций: ${spErr.message}`);
+        }
+      }
+
+      // B. SoundCloud Native Related Tracks (Primary / Reinforcement)
       try {
-        candidates = await soundcloud.getRelatedTracks(base, 25);
-        logger.info(`[${this.guildId}] Автоплей: получено ${candidates.length} похожих треков из SoundCloud`);
+        const scRelated = await soundcloud.getRelatedTracks(base, 25);
+        logger.info(`[${this.guildId}] Автоплей: получено ${scRelated.length} похожих треков из SoundCloud`);
+        candidates.push(...scRelated);
       } catch (err) {
         logger.debug(`[${this.guildId}] Ошибка soundcloud.getRelatedTracks: ${err.message}`);
       }
@@ -720,6 +763,8 @@ class MusicQueue {
       }
 
       // 3. Filter candidates: only SoundCloud, unplayed, not disliked, quality checked
+      const baseSongName = this.cleanSongName(base.title);
+
       const unplayed = uniqueCandidates.filter((item) => {
         if (!item.url) return false;
         if (item.source !== 'soundcloud') return false;
@@ -728,6 +773,17 @@ class MusicQueue {
 
         const candArtist = extractArtist(item).toLowerCase().trim();
         if (candArtist && this.dislikedAuthors.has(candArtist)) return false;
+
+        // Duplicate / bootleg re-upload filter:
+        // Exclude re-uploads of the current song or songs recently played
+        const candSongName = this.cleanSongName(item.title);
+        if (baseSongName && candSongName) {
+          if (candSongName === baseSongName) return false;
+          if (candSongName.length >= 4 && baseSongName.length >= 4) {
+            if (candSongName.includes(baseSongName) || baseSongName.includes(candSongName)) return false;
+          }
+        }
+        if (candSongName && this.recentSongNames.includes(candSongName)) return false;
 
         // Quality check (keyword filtering + length checks)
         if (!soundcloud.isQualityTrack(item, base.title)) return false;

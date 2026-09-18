@@ -203,6 +203,98 @@ async function getPlaylist(id, requestedBy) {
   }
 }
 
+async function getRecommendations(trackName, artistName, limit = 15) {
+  if (!isConfigured()) return [];
+
+  try {
+    const spotify = await client();
+    let seedTrackId = null;
+    let seedArtistId = null;
+
+    const cleanArtist = (artistName || '').trim();
+    const cleanTitle = (trackName || '').trim();
+
+    if (cleanTitle) {
+      const query = cleanArtist && !cleanTitle.toLowerCase().includes(cleanArtist.toLowerCase())
+        ? `track:${cleanTitle} artist:${cleanArtist}`
+        : cleanTitle;
+
+      try {
+        const searchRes = await spotify.searchTracks(query, { limit: 1 });
+        const item = searchRes.body?.tracks?.items?.[0];
+        if (item) {
+          seedTrackId = item.id;
+          seedArtistId = item.artists?.[0]?.id ?? null;
+        }
+      } catch {}
+    }
+
+    if (!seedArtistId && cleanArtist) {
+      try {
+        const artistSearch = await spotify.searchArtists(cleanArtist, { limit: 1 });
+        seedArtistId = artistSearch.body?.artists?.items?.[0]?.id ?? null;
+      } catch {}
+    }
+
+    if (!seedTrackId && !seedArtistId) {
+      return [];
+    }
+
+    const recommendedTracks = [];
+
+    // 1. Query Spotify Recommendations API (seed_tracks, seed_artists)
+    try {
+      const options = { limit };
+      if (seedTrackId) options.seed_tracks = [seedTrackId];
+      if (seedArtistId) options.seed_artists = [seedArtistId];
+
+      const recRes = await spotify.getRecommendations(options);
+      const items = recRes.body?.tracks ?? [];
+      for (const item of items) {
+        const author = (item.artists ?? []).map((a) => a.name).filter(Boolean).join(', ') || 'Unknown';
+        recommendedTracks.push({
+          title: item.name,
+          artist: author,
+          fullQuery: `${author} - ${item.name}`,
+          duration: Math.round((item.duration_ms || 0) / 1000),
+          spotifyUrl: item.external_urls?.spotify ?? null,
+        });
+      }
+    } catch (recErr) {
+      logger.debug(`Spotify getRecommendations: ${recErr.message}`);
+    }
+
+    // 2. Fallback / Supplement via Spotify Related Artists ("Fans Also Like" collaborative graph)
+    if (recommendedTracks.length < 5 && seedArtistId) {
+      try {
+        const relatedRes = await spotify.getArtistRelatedArtists(seedArtistId);
+        const relatedArtists = (relatedRes.body?.artists ?? []).slice(0, 6);
+        for (const relArtist of relatedArtists) {
+          const topTracksRes = await spotify.getArtistTopTracks(relArtist.id, 'US');
+          const topTracks = (topTracksRes.body?.tracks ?? []).slice(0, 2);
+          for (const item of topTracks) {
+            const author = (item.artists ?? []).map((a) => a.name).filter(Boolean).join(', ') || relArtist.name;
+            recommendedTracks.push({
+              title: item.name,
+              artist: author,
+              fullQuery: `${author} - ${item.name}`,
+              duration: Math.round((item.duration_ms || 0) / 1000),
+              spotifyUrl: item.external_urls?.spotify ?? null,
+            });
+          }
+        }
+      } catch (relErr) {
+        logger.debug(`Spotify getArtistRelatedArtists fallback: ${relErr.message}`);
+      }
+    }
+
+    return recommendedTracks;
+  } catch (error) {
+    logger.debug(`spotify.getRecommendations error: ${error.message}`);
+    return [];
+  }
+}
+
 async function resolve(input, requestedBy) {
   const parsed = parse(input);
   if (!parsed) throw new UserError('Не удалось разобрать ссылку Spotify.');
@@ -216,4 +308,4 @@ async function resolve(input, requestedBy) {
   return { type: 'playlist', ...collection };
 }
 
-module.exports = { isUrl, isConfigured, parse, resolve, fetchStream };
+module.exports = { isUrl, isConfigured, parse, resolve, fetchStream, getRecommendations };
