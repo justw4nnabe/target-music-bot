@@ -144,6 +144,9 @@ function normalize(entry, requestedBy, index = 0) {
     streamProvider: fetchStream,
   });
   if (entry.id) track.id = String(entry.id);
+  if (entry.genre) track.genre = entry.genre;
+  if (entry.playback_count) track.playbackCount = entry.playback_count;
+  if (entry.likes_count) track.likesCount = entry.likes_count;
   return track;
 }
 
@@ -261,7 +264,42 @@ async function getClientId() {
   return 'Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo';
 }
 
-async function getRelatedTracks(track, limit = 15) {
+const NEGATIVE_GROUPS = [
+  ['slowed', 'reverb'],
+  ['nightcore', 'sped up', 'speed up'],
+  ['bass boosted', 'bassboosted', 'earrape'],
+  ['type beat', 'free beat', 'instrumental'],
+  ['karaoke', 'remake', 'snippet', 'preview'],
+  ['1 hour', '10 hour', 'loop', 'podcast', 'full album'],
+];
+
+function isQualityTrack(item, baseTitle = '') {
+  const title = (item.title || '').toLowerCase();
+  const base = (baseTitle || '').toLowerCase();
+
+  for (const group of NEGATIVE_GROUPS) {
+    const titleHasGroup = group.some((kw) => title.includes(kw));
+    const baseHasGroup = group.some((kw) => base.includes(kw));
+
+    if (titleHasGroup && !baseHasGroup) {
+      return false;
+    }
+  }
+
+  const durationSec = item.duration
+    ? Math.round(item.duration / 1000)
+    : item.full_duration
+      ? Math.round(item.full_duration / 1000)
+      : Number(item.durationSec) || 0;
+
+  if (durationSec > 0 && (durationSec < 65 || durationSec > 480)) {
+    return false;
+  }
+
+  return true;
+}
+
+async function getRelatedTracks(track, limit = 25) {
   let trackId = track?.id;
   if (!trackId && track?.url) {
     const apiMatch = track.url.match(/tracks\/(\d+)/);
@@ -302,12 +340,24 @@ async function getRelatedTracks(track, limit = 15) {
 
     const json = await res.json();
     const collection = json.collection || [];
+    const baseTitle = track?.title || '';
+
+    // First filter by negative keywords and reasonable song length
+    const cleanCollection = collection.filter((item) => item.permalink_url && isQualityTrack(item, baseTitle));
+
+    // Check if we have enough tracks with proven engagement (min 1500 plays or 25 likes or reputable creator)
+    const highEngagement = cleanCollection.filter((item) => {
+      const plays = item.playback_count || 0;
+      const likes = item.likes_count || 0;
+      const followers = item.user?.followers_count || 0;
+      return plays >= 1500 || likes >= 25 || followers >= 300;
+    });
+
+    const candidateItems = highEngagement.length >= 5 ? highEngagement : cleanCollection;
     const tracks = [];
 
-    for (const item of collection) {
-      if (!item.permalink_url) continue;
+    for (const item of candidateItems) {
       const durationSec = Math.round((item.duration || 0) / 1000);
-      if (durationSec > 0 && durationSec < 50) continue;
 
       let title = item.title || 'Без названия';
       const author = item.user?.username || 'SoundCloud';
@@ -325,7 +375,13 @@ async function getRelatedTracks(track, limit = 15) {
         requestedBy: track?.requestedBy,
         streamProvider: fetchStream,
       });
+
       if (item.id) t.id = String(item.id);
+      if (item.genre) t.genre = item.genre;
+      if (item.playback_count) t.playbackCount = item.playback_count;
+      if (item.likes_count) t.likesCount = item.likes_count;
+      if (item.tag_list) t.tags = item.tag_list;
+
       tracks.push(t);
     }
 
@@ -337,4 +393,15 @@ async function getRelatedTracks(track, limit = 15) {
   }
 }
 
-module.exports = { isUrl, isPlaylistUrl, getTrack, getPlaylist, search, findBestMatch, fetchStream, resolveTrack, getRelatedTracks };
+module.exports = {
+  isUrl,
+  isPlaylistUrl,
+  getTrack,
+  getPlaylist,
+  search,
+  findBestMatch,
+  fetchStream,
+  resolveTrack,
+  getRelatedTracks,
+  isQualityTrack,
+};

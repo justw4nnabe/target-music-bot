@@ -73,6 +73,8 @@ class MusicQueue {
     this.lastPlayedTrack = null;
     this.playedHistory = [];
     this.recentAuthors = [];
+    this.sessionVibe = [];
+    this.dislikedAuthors = new Set();
     this.autoplay = false;
     this.skipVotes = new Set();
     this.volume = config.player.defaultVolume;
@@ -239,10 +241,53 @@ class MusicQueue {
     });
   }
 
+  addToSessionVibe(track) {
+    if (!track) return;
+    const artist = extractArtist(track);
+    const entry = {
+      title: track.title,
+      author: artist || track.author,
+      genre: track.genre || '',
+      url: track.url,
+      source: track.source,
+      id: track.id,
+    };
+    this.sessionVibe = this.sessionVibe.filter((item) => item.url && item.url !== entry.url);
+    this.sessionVibe.push(entry);
+    if (this.sessionVibe.length > 6) this.sessionVibe.shift();
+  }
+
+  getSessionVibeProfile() {
+    const genres = {};
+    for (const item of this.sessionVibe) {
+      if (item.genre) {
+        const g = item.genre.trim().toLowerCase();
+        genres[g] = (genres[g] || 0) + 1;
+      }
+    }
+    let dominantGenre = null;
+    let maxCount = 0;
+    for (const [g, count] of Object.entries(genres)) {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantGenre = g;
+      }
+    }
+    return {
+      dominantGenre,
+      anchors: this.sessionVibe.slice(-3),
+    };
+  }
+
   enqueue(tracks) {
     const free = Math.max(0, config.queue.maxSize - this.tracks.length);
     const accepted = tracks.slice(0, free);
     this.tracks.push(...accepted);
+    for (const t of accepted) {
+      if (!t.isAutoplay) {
+        this.addToSessionVibe(t);
+      }
+    }
     this.preResolveQueue();
     return { added: accepted.length, skipped: tracks.length - accepted.length };
   }
@@ -320,6 +365,9 @@ class MusicQueue {
       try {
         await this.playResource(track, seekSeconds);
         this.lastPlayedTrack = track;
+        if (!track.isAutoplay) {
+          this.addToSessionVibe(track);
+        }
         if (track.url) {
           this.playedHistory.push(track.url);
           if (this.playedHistory.length > 50) this.playedHistory.shift();
@@ -603,28 +651,45 @@ class MusicQueue {
       }
 
       const baseArtist = extractArtist(base);
+      const { dominantGenre, anchors } = this.getSessionVibeProfile();
+
       logger.info(
-        `[${this.guildId}] Автовоспроизведение: подбираю трек на SoundCloud по стилю «${base.title}» (артист: ${baseArtist || 'неизвестен'})`,
+        `[${this.guildId}] Автовоспроизведение: подбираю трек по стилю «${base.title}» (артист: ${baseArtist || 'неизвестен'}${dominantGenre ? `, доминантный жанр сессии: ${dominantGenre}` : ''})`,
       );
 
-      // 2. Primary Engine: SoundCloud native related tracks (strict genre/vibe consistency)
+      // 2. Candidate Collection:
+      // Primary: SoundCloud native related tracks for the current base track
       let candidates = [];
       try {
-        candidates = await soundcloud.getRelatedTracks(base, 20);
+        candidates = await soundcloud.getRelatedTracks(base, 25);
         logger.info(`[${this.guildId}] Автоплей: получено ${candidates.length} похожих треков из SoundCloud`);
       } catch (err) {
         logger.debug(`[${this.guildId}] Ошибка soundcloud.getRelatedTracks: ${err.message}`);
       }
 
-      // 3. Fallback / Supplement: If few related tracks, search SoundCloud for artist or similar artists
-      if (!candidates || candidates.length < 3) {
+      // Secondary (Anti-Drift Anchor): If session has anchor tracks, fetch related from one to keep vibe grounded
+      if (anchors && anchors.length > 1) {
+        const anchor = anchors[0];
+        if (anchor && anchor.url !== base.url) {
+          try {
+            const anchorCandidates = await soundcloud.getRelatedTracks(anchor, 15);
+            logger.info(
+              `[${this.guildId}] Автоплей (Anti-Drift): получено ${anchorCandidates.length} треков от сессионного якоря «${anchor.title}»`,
+            );
+            candidates.push(...anchorCandidates);
+          } catch {}
+        }
+      }
+
+      // Fallback / Supplement: If few related tracks, search SoundCloud for artist or similar artists
+      if (!candidates || candidates.length < 5) {
         if (baseArtist && baseArtist !== 'SoundCloud') {
-          // Try similar artists via Last.fm if available
           try {
             const similarArtists = await getSimilarArtists(baseArtist);
             const freshArtists = similarArtists.filter(
               (a) =>
                 !this.recentAuthors.includes(a.toLowerCase().trim()) &&
+                !this.dislikedAuthors.has(a.toLowerCase().trim()) &&
                 a.toLowerCase().trim() !== baseArtist.toLowerCase().trim(),
             );
             for (const simArtist of freshArtists.slice(0, 3)) {
@@ -633,7 +698,6 @@ class MusicQueue {
             }
           } catch {}
 
-          // Also search SoundCloud for base artist's music
           try {
             const moreArtistTracks = await soundcloud.search(baseArtist, requestedBy, 6);
             candidates.push(...moreArtistTracks);
@@ -646,20 +710,35 @@ class MusicQueue {
         return null;
       }
 
-      // 4. Filter candidates: only SoundCloud, unplayed, full songs
-      const unplayed = candidates.filter((item) => {
+      // Deduplicate candidates by URL
+      const seenUrls = new Set();
+      const uniqueCandidates = [];
+      for (const item of candidates) {
+        if (!item.url || seenUrls.has(item.url)) continue;
+        seenUrls.add(item.url);
+        uniqueCandidates.push(item);
+      }
+
+      // 3. Filter candidates: only SoundCloud, unplayed, not disliked, quality checked
+      const unplayed = uniqueCandidates.filter((item) => {
         if (!item.url) return false;
         if (item.source !== 'soundcloud') return false;
         if (this.playedHistory.includes(item.url)) return false;
         if (base.url && item.url === base.url) return false;
-        if (item.duration > 0 && item.duration < 50) return false; // Filter short preview snippets
+
+        const candArtist = extractArtist(item).toLowerCase().trim();
+        if (candArtist && this.dislikedAuthors.has(candArtist)) return false;
+
+        // Quality check (keyword filtering + length checks)
+        if (!soundcloud.isQualityTrack(item, base.title)) return false;
+
         return true;
       });
 
-      const pool = unplayed.length ? unplayed : candidates.filter((item) => item.source === 'soundcloud');
+      const pool = unplayed.length ? unplayed : uniqueCandidates.filter((item) => item.source === 'soundcloud');
       if (!pool.length) return null;
 
-      // 5. Score candidates for artist diversity and style retention
+      // 4. Multi-Factor Scoring Matrix:
       const baseArtistNorm = (baseArtist || '').toLowerCase().trim();
 
       const scored = pool.map((cand) => {
@@ -667,22 +746,50 @@ class MusicQueue {
         const authorNorm = candArtist.toLowerCase().trim();
         let score = 0;
 
+        // A. Genre Alignment (+25 for matching session dominant genre, +20 for matching base track genre)
+        if (dominantGenre && cand.genre) {
+          const candG = cand.genre.toLowerCase();
+          if (candG.includes(dominantGenre) || dominantGenre.includes(candG)) {
+            score += 25;
+          }
+        } else if (base.genre && cand.genre && base.genre.toLowerCase() === cand.genre.toLowerCase()) {
+          score += 20;
+        }
+
+        // B. Artist Freshness & Diversity
         if (authorNorm && authorNorm !== 'soundcloud' && authorNorm !== 'youtube') {
           const recentIndex = this.recentAuthors.indexOf(authorNorm);
           if (recentIndex === -1) {
-            score += 15; // Brand new artist in the same genre
+            score += 15; // Fresh artist in the same genre
           } else {
             // Higher score if played longer ago
-            score += this.recentAuthors.length - recentIndex - 1;
+            score += (this.recentAuthors.length - recentIndex - 1);
           }
 
-          if (authorNorm !== baseArtistNorm) {
-            score += 5; // Rotate away from current artist
+          // Penalize repeating the exact same artist as the track that just finished
+          if (authorNorm === baseArtistNorm) {
+            score -= 20;
+          }
+
+          // Heavy penalty if disliked
+          if (this.dislikedAuthors.has(authorNorm)) {
+            score -= 50;
           }
         }
 
-        if (cand.duration >= 60 && cand.duration <= 450) {
-          score += 3;
+        // C. Social Proof / Popularity Bonus
+        if (cand.playbackCount) {
+          if (cand.playbackCount > 100000) score += 10;
+          else if (cand.playbackCount > 25000) score += 6;
+          else if (cand.playbackCount > 5000) score += 3;
+        }
+        if (cand.likesCount && cand.likesCount > 1000) {
+          score += 5;
+        }
+
+        // D. Golden Song Duration (2:15 - 4:15)
+        if (cand.duration >= 135 && cand.duration <= 255) {
+          score += 5;
         }
 
         return { cand, score };
@@ -772,6 +879,21 @@ class MusicQueue {
     const skipped = this.current;
     if (this.loopMode === 'track') this.loopMode = 'off';
     this.manualSkip = true;
+
+    // Fast-skip detection (< 20 seconds) on autoplay tracks
+    if (skipped.isAutoplay) {
+      const playedSeconds = this.getPosition();
+      if (playedSeconds < 20) {
+        const artist = extractArtist(skipped);
+        if (artist && artist !== 'SoundCloud' && artist !== 'YouTube') {
+          this.dislikedAuthors.add(artist.toLowerCase().trim());
+          logger.info(
+            `[${this.guildId}] Автоплей: трек «${skipped.title}» быстро скипнут (${playedSeconds}с), артист «${artist}» временно заблокирован в сессии`,
+          );
+        }
+      }
+    }
+
     this.idleAction = 'advance';
     this.player.stop(true);
     return skipped;
