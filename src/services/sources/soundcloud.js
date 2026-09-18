@@ -264,6 +264,42 @@ async function getClientId() {
   return 'Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo';
 }
 
+const NEGATIVE_PATTERNS = [
+  // Promo links and telegram handles in titles
+  /https?:\/\//i,
+  /t\.me\//i,
+  /vk\.com\//i,
+  /discord\.gg\//i,
+  /\btg:\s*@/i,
+
+  // Intros & Outros modifications (fan-added white noise or custom intros)
+  /(?:original|extended|guitar|special|with|w\/|\+|\b)\s*ин?тро/i,
+  /\[(?:.*?\b)?(?:intro|интро)(?:\b.*?|)\]/i,
+  /\((?:.*?\b)?(?:intro|интро)(?:\b.*?|)\)/i,
+  /(?:extended|with|w\/|\+)\s*outro/i,
+  /\[(?:.*?\b)?outro(?:\b.*?|)\]/i,
+  /\((?:.*?\b)?outro(?:\b.*?|)\)/i,
+
+  // AI generated vocals and covers
+  /\[full\s*ai\]/i,
+  /\(full\s*ai\)/i,
+  /\bai\s*(?:cover|version|remaster|vocal|edit)\b/i,
+  /нейросеть/i,
+  /\[ai\]/i,
+  /\(ai\)/i,
+
+  // Fan edits, leaks, snippets, bootlegs
+  /\[edit\]/i,
+  /\(edit\)/i,
+  /\b(?:tiktok|tik\s*tok|audio|loop)\s*edit\b/i,
+  /\b(?:bootleg|буклег|mashup|мэшап|flip)\b/i,
+  /\[(?:leak|unreleased|snippet)\]/i,
+  /\((?:leak|unreleased|snippet)\)/i,
+  /\b(?:leak|слив|unreleased|snippet|сэмплер)\b/i,
+  /\b(?:remake|ремейк|переделка)\b/i,
+  /\b(?:acapella|акапелла|karaoke|караоке)\b/i,
+];
+
 const NEGATIVE_GROUPS = [
   ['slowed', 'reverb'],
   ['nightcore', 'sped up', 'speed up'],
@@ -276,6 +312,14 @@ const NEGATIVE_GROUPS = [
 function isQualityTrack(item, baseTitle = '') {
   const title = (item.title || '').toLowerCase();
   const base = (baseTitle || '').toLowerCase();
+
+  for (const pat of NEGATIVE_PATTERNS) {
+    if (pat.test(title)) {
+      if (!pat.test(base)) {
+        return false;
+      }
+    }
+  }
 
   for (const group of NEGATIVE_GROUPS) {
     const titleHasGroup = group.some((kw) => title.includes(kw));

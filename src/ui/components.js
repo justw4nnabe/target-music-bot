@@ -25,21 +25,8 @@ function playerRow(queue, disabled = false) {
   const loopLabel = loopMode === 'track' ? 'Повтор: трек' : loopMode === 'queue' ? 'Повтор: очередь' : 'Повтор';
 
   const isAutoplay = Boolean(queue?.autoplay);
-  const current = queue?.current;
-  const isOtherTrackWithAutoplay = Boolean(current?.isAutoplay || current?.autoplayActiveOnStart);
-
-  let autoplayLabel = 'Автоплей';
-  let autoplayStyle = ButtonStyle.Secondary;
-  let autoplayDisabled = disabled;
-
-  if (isAutoplay) {
-    autoplayLabel = 'Выкл. автоплей';
-    autoplayStyle = ButtonStyle.Success;
-  } else if (isOtherTrackWithAutoplay) {
-    autoplayLabel = 'Автоплей: выкл';
-    autoplayStyle = ButtonStyle.Secondary;
-    autoplayDisabled = true;
-  }
+  const autoplayLabel = isAutoplay ? 'Выкл. автоплей' : 'Автоплей';
+  const autoplayStyle = isAutoplay ? ButtonStyle.Success : ButtonStyle.Secondary;
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()

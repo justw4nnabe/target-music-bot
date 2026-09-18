@@ -50,14 +50,6 @@ async function handleButton(client, interaction) {
     }
 
     case components.IDS.autoplay: {
-      const isOtherTrackWithAutoplay = Boolean(queue.current?.isAutoplay || queue.current?.autoplayActiveOnStart);
-      if (isOtherTrackWithAutoplay && !queue.autoplay) {
-        await interaction.reply({
-          content: 'На этом треке автовоспроизведение уже выключено.',
-          flags: MessageFlags.Ephemeral | MessageFlags.SuppressNotifications,
-        });
-        return;
-      }
       queue.toggleAutoplay();
       await interaction.update({ components: components.playerRows(queue) });
       return;

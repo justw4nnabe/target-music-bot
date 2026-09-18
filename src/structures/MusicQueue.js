@@ -251,6 +251,16 @@ class MusicQueue {
       .trim();
   }
 
+  resetSession() {
+    this.autoplay = false;
+    this.sessionVibe = [];
+    this.recentAuthors = [];
+    this.recentSongNames = [];
+    this.dislikedAuthors.clear();
+    this.lastPlayedTrack = null;
+    this.playedHistory = [];
+  }
+
   addToSessionVibe(track) {
     if (!track) return;
     const artist = extractArtist(track);
@@ -264,7 +274,7 @@ class MusicQueue {
     };
     this.sessionVibe = this.sessionVibe.filter((item) => item.url && item.url !== entry.url);
     this.sessionVibe.push(entry);
-    if (this.sessionVibe.length > 6) this.sessionVibe.shift();
+    if (this.sessionVibe.length > 4) this.sessionVibe.shift();
   }
 
   getSessionVibeProfile() {
@@ -283,13 +293,13 @@ class MusicQueue {
         dominantGenre = g;
       }
     }
-    return {
-      dominantGenre,
-      anchors: this.sessionVibe.slice(-3),
-    };
+    return { dominantGenre };
   }
 
   enqueue(tracks) {
+    if (!this.current && !this.tracks.length) {
+      this.resetSession();
+    }
     const free = Math.max(0, config.queue.maxSize - this.tracks.length);
     const accepted = tracks.slice(0, free);
     this.tracks.push(...accepted);
@@ -606,6 +616,7 @@ class MusicQueue {
   }
 
   async handleQueueEnd() {
+    this.resetSession();
     await this.retireNowPlaying();
     await this.send(embeds.info('Очередь закончилась. Добавь ещё треков или я выйду из канала через несколько минут.'));
     this.scheduleIdleLeave();
@@ -667,10 +678,10 @@ class MusicQueue {
       }
 
       const baseArtist = extractArtist(base);
-      const { dominantGenre, anchors } = this.getSessionVibeProfile();
+      const { dominantGenre } = this.getSessionVibeProfile();
 
       logger.info(
-        `[${this.guildId}] Автовоспроизведение: подбираю трек по стилю «${base.title}» (артист: ${baseArtist || 'неизвестен'}${dominantGenre ? `, доминантный жанр сессии: ${dominantGenre}` : ''})`,
+        `[${this.guildId}] Автовоспроизведение: подбираю трек по стилю «${base.title}» (артист: ${baseArtist || 'неизвестен'}${dominantGenre ? `, доминантный жанр: ${dominantGenre}` : ''})`,
       );
 
       // 2. Candidate Collection:
@@ -701,27 +712,13 @@ class MusicQueue {
         }
       }
 
-      // B. SoundCloud Native Related Tracks (Primary / Reinforcement)
+      // B. SoundCloud Native Related Tracks (Primary / Reinforcement for current track)
       try {
         const scRelated = await soundcloud.getRelatedTracks(base, 25);
         logger.info(`[${this.guildId}] Автоплей: получено ${scRelated.length} похожих треков из SoundCloud`);
         candidates.push(...scRelated);
       } catch (err) {
         logger.debug(`[${this.guildId}] Ошибка soundcloud.getRelatedTracks: ${err.message}`);
-      }
-
-      // Secondary (Anti-Drift Anchor): If session has anchor tracks, fetch related from one to keep vibe grounded
-      if (anchors && anchors.length > 1) {
-        const anchor = anchors[0];
-        if (anchor && anchor.url !== base.url) {
-          try {
-            const anchorCandidates = await soundcloud.getRelatedTracks(anchor, 15);
-            logger.info(
-              `[${this.guildId}] Автоплей (Anti-Drift): получено ${anchorCandidates.length} треков от сессионного якоря «${anchor.title}»`,
-            );
-            candidates.push(...anchorCandidates);
-          } catch {}
-        }
       }
 
       // Fallback / Supplement: If few related tracks, search SoundCloud for artist or similar artists
@@ -802,21 +799,31 @@ class MusicQueue {
         const authorNorm = candArtist.toLowerCase().trim();
         let score = 0;
 
-        // A. Genre Alignment (+25 for matching session dominant genre, +20 for matching base track genre)
-        if (dominantGenre && cand.genre) {
+        // A. Genre Alignment (+25 for matching base track genre, +10 for matching session genre)
+        if (base.genre && cand.genre && base.genre.toLowerCase() === cand.genre.toLowerCase()) {
+          score += 25;
+        } else if (dominantGenre && cand.genre) {
           const candG = cand.genre.toLowerCase();
           if (candG.includes(dominantGenre) || dominantGenre.includes(candG)) {
-            score += 25;
+            score += 10;
           }
-        } else if (base.genre && cand.genre && base.genre.toLowerCase() === cand.genre.toLowerCase()) {
-          score += 20;
         }
 
-        // B. Artist Freshness & Diversity
+        // B. Official Artist / Uploader Authenticity
+        const candUploader = (cand.author || '').toLowerCase().trim();
+        if (authorNorm && candUploader && candUploader !== 'soundcloud') {
+          if (candUploader.includes(authorNorm) || authorNorm.includes(candUploader)) {
+            score += 25; // Official artist channel upload
+          } else if (cand.title.toLowerCase().includes(authorNorm)) {
+            score -= 15; // Third-party fan re-upload
+          }
+        }
+
+        // C. Artist Freshness & Diversity
         if (authorNorm && authorNorm !== 'soundcloud' && authorNorm !== 'youtube') {
           const recentIndex = this.recentAuthors.indexOf(authorNorm);
           if (recentIndex === -1) {
-            score += 15; // Fresh artist in the same genre
+            score += 15; // Fresh artist in the same scene
           } else {
             // Higher score if played longer ago
             score += (this.recentAuthors.length - recentIndex - 1);
@@ -824,7 +831,7 @@ class MusicQueue {
 
           // Penalize repeating the exact same artist as the track that just finished
           if (authorNorm === baseArtistNorm) {
-            score -= 20;
+            score -= 15;
           }
 
           // Heavy penalty if disliked
@@ -833,18 +840,19 @@ class MusicQueue {
           }
         }
 
-        // C. Social Proof / Popularity Bonus
+        // D. Social Proof / Popularity Bonus & Low-Quality Penalty
         if (cand.playbackCount) {
-          if (cand.playbackCount > 100000) score += 10;
-          else if (cand.playbackCount > 25000) score += 6;
-          else if (cand.playbackCount > 5000) score += 3;
+          if (cand.playbackCount > 100000) score += 15;
+          else if (cand.playbackCount > 25000) score += 8;
+          else if (cand.playbackCount > 5000) score += 4;
+          else if (cand.playbackCount < 3000) score -= 10;
         }
         if (cand.likesCount && cand.likesCount > 1000) {
           score += 5;
         }
 
-        // D. Golden Song Duration (2:15 - 4:15)
-        if (cand.duration >= 135 && cand.duration <= 255) {
+        // E. Golden Song Duration (1:45 - 4:15)
+        if (cand.duration >= 105 && cand.duration <= 255) {
           score += 5;
         }
 
@@ -961,6 +969,7 @@ class MusicQueue {
     this.tracks = [];
     this.current = null;
     this.loopMode = 'off';
+    this.resetSession();
     this.idleAction = 'ignore';
     this.player.stop(true);
     this.releaseStream();
@@ -1049,6 +1058,7 @@ class MusicQueue {
     this.cancelEmptyChannelTimer();
     this.tracks = [];
     this.current = null;
+    this.resetSession();
 
     this.idleAction = 'ignore';
     try {
