@@ -70,15 +70,14 @@ function buildArgs({ url, headers, seek }) {
     if (userAgent) args.push('-user_agent', String(userAgent[1]));
     if (rest.length) args.push('-headers', `${rest.map(([key, value]) => `${key}: ${value}`).join('\r\n')}\r\n`);
 
-    args.push(
-      '-reconnect', '1',
-      '-reconnect_at_eof', '1',
-      '-reconnect_streamed', '1',
-      '-reconnect_on_network_error', '1',
-      '-reconnect_on_http_error', '5xx',
-      '-reconnect_delay_max', '5',
-      '-rw_timeout', '15000000',
-    );
+    const isHls = /\.m3u8(?:[?#]|$)/i.test(url) || /soundcloud\.cloud/i.test(url);
+    if (!isHls) {
+      args.push(
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+      );
+    }
   }
 
   if (seek > 0) args.push('-ss', String(seek));
